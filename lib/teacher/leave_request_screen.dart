@@ -8,16 +8,79 @@ class LeaveRequestScreen extends StatefulWidget {
   State<LeaveRequestScreen> createState() => _LeaveRequestScreenState();
 }
 
-class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
-  String selectedLeaveType = "Casual Leave";
+class _LeaveRequestScreenState extends State<LeaveRequestScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
 
-  final TextEditingController reasonController = TextEditingController();
+  final TextEditingController searchController = TextEditingController();
 
-  final List<Map<String, String>> leaveHistory = [
-    {"type": "Medical Leave", "date": "15 Jul 2026", "status": "Approved"},
+  String searchText = "";
 
-    {"type": "Casual Leave", "date": "20 Jun 2026", "status": "Rejected"},
+  final List<LeaveRequest> leaveRequests = [
+    LeaveRequest(
+      studentName: "Rahul Kumar",
+      className: "Class 6-A",
+      parentName: "Ramesh Kumar",
+      reason: "Fever",
+      fromDate: "10 Aug 2026",
+      toDate: "10 Aug 2026",
+      appliedDate: "09 Aug 2026",
+      status: "Pending",
+    ),
+    LeaveRequest(
+      studentName: "Sneha Patel",
+      className: "Class 7-B",
+      parentName: "Mahesh Patel",
+      reason: "Family Function",
+      fromDate: "12 Aug 2026",
+      toDate: "13 Aug 2026",
+      appliedDate: "10 Aug 2026",
+      status: "Pending",
+    ),
+    LeaveRequest(
+      studentName: "Arjun Kumar",
+      className: "Class 8-A",
+      parentName: "Kiran Kumar",
+      reason: "Medical Checkup",
+      fromDate: "08 Aug 2026",
+      toDate: "08 Aug 2026",
+      appliedDate: "07 Aug 2026",
+      status: "Approved",
+    ),
+    LeaveRequest(
+      studentName: "Anjali Sharma",
+      className: "Class 6-A",
+      parentName: "Suresh Sharma",
+      reason: "Travel",
+      fromDate: "05 Aug 2026",
+      toDate: "06 Aug 2026",
+      appliedDate: "04 Aug 2026",
+      status: "Rejected",
+    ),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    searchController.dispose();
+    super.dispose();
+  }
+
+  int get pendingCount =>
+      leaveRequests.where((e) => e.status == "Pending").length;
+
+  int get approvedCount =>
+      leaveRequests.where((e) => e.status == "Approved").length;
+
+  int get rejectedCount =>
+      leaveRequests.where((e) => e.status == "Rejected").length;
 
   @override
   Widget build(BuildContext context) {
@@ -26,304 +89,288 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
 
       appBar: AppBar(
         backgroundColor: const Color(0xff1565C0),
-
-        elevation: 0,
-
         centerTitle: true,
-
         title: Text(
-          "Leave Request",
-
+          "Leave Management",
           style: GoogleFonts.poppins(
             color: Colors.white,
-
             fontWeight: FontWeight.w600,
           ),
         ),
+
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          tabs: const [
+            Tab(text: "Pending"),
+            Tab(text: "Approved"),
+            Tab(text: "Rejected"),
+          ],
+        ),
       ),
 
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+      body: Column(
+        children: [
+          const SizedBox(height: 15),
 
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: TextField(
+              controller: searchController,
+              onChanged: (value) {
+                setState(() {
+                  searchText = value;
+                });
+              },
+              decoration: InputDecoration(
+                hintText: "Search Student",
 
-          children: [
-            // APPLY LEAVE CARD
-            Container(
-              padding: const EdgeInsets.all(20),
+                prefixIcon: const Icon(Icons.search),
 
-              decoration: BoxDecoration(
-                color: Colors.white,
+                filled: true,
 
-                borderRadius: BorderRadius.circular(22),
+                fillColor: Colors.white,
+
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide.none,
+                ),
               ),
+            ),
+          ),
 
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 18),
 
-                children: [
-                  Text(
-                    "Apply New Leave",
-
-                    style: GoogleFonts.poppins(
-                      fontSize: 22,
-
-                      fontWeight: FontWeight.bold,
-                    ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _summaryCard(
+                    "Pending",
+                    pendingCount.toString(),
+                    Colors.orange,
                   ),
-
-                  const SizedBox(height: 20),
-
-                  Text(
-                    "Leave Type",
-
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _summaryCard(
+                    "Approved",
+                    approvedCount.toString(),
+                    Colors.green,
                   ),
-
-                  const SizedBox(height: 10),
-
-                  DropdownButtonFormField<String>(
-                    value: selectedLeaveType,
-
-                    decoration: _inputDecoration(),
-
-                    items:
-                        [
-                          "Casual Leave",
-
-                          "Medical Leave",
-
-                          "Emergency Leave",
-
-                          "Personal Leave",
-                        ].map((e) {
-                          return DropdownMenuItem(value: e, child: Text(e));
-                        }).toList(),
-
-                    onChanged: (value) {
-                      setState(() {
-                        selectedLeaveType = value!;
-                      });
-                    },
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _summaryCard(
+                    "Rejected",
+                    rejectedCount.toString(),
+                    Colors.red,
                   ),
+                ),
+              ],
+            ),
+          ),
 
-                  const SizedBox(height: 20),
+          const SizedBox(height: 15),
 
-                  Text(
-                    "From Date",
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [Container(), Container(), Container()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-                  ),
+  Widget _summaryCard(String title, String count, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(15),
 
-                  const SizedBox(height: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
 
-                  _dateBox("Select Start Date", Icons.calendar_today),
+        borderRadius: BorderRadius.circular(18),
 
-                  const SizedBox(height: 15),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6)],
+      ),
 
-                  Text(
-                    "To Date",
+      child: Column(
+        children: [
+          CircleAvatar(
+            backgroundColor: color.withOpacity(.12),
 
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-                  ),
+            child: Text(
+              count,
+              style: TextStyle(color: color, fontWeight: FontWeight.bold),
+            ),
+          ),
 
-                  const SizedBox(height: 10),
+          const SizedBox(height: 8),
 
-                  _dateBox("Select End Date", Icons.event),
+          Text(title, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
 
-                  const SizedBox(height: 20),
+class LeaveRequest {
+  String studentName;
+  String className;
+  String parentName;
+  String reason;
+  String fromDate;
+  String toDate;
+  String appliedDate;
+  String status;
 
-                  TextField(
-                    controller: reasonController,
+  LeaveRequest({
+    required this.studentName,
+    required this.className,
+    required this.parentName,
+    required this.reason,
+    required this.fromDate,
+    required this.toDate,
+    required this.appliedDate,
+    required this.status,
+  });
+  Widget _buildLeaveCard({
+    required String studentName,
+    required String className,
+    required String reason,
+    required String fromDate,
+    required String toDate,
+    required String status,
+    required Color statusColor,
+  }) {
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const CircleAvatar(
+                  radius: 28,
+                  backgroundColor: Color(0xffE3F2FD),
+                  child: Icon(Icons.person, color: Color(0xff1565C0)),
+                ),
 
-                    maxLines: 3,
+                const SizedBox(width: 15),
 
-                    decoration: _inputDecoration().copyWith(
-                      hintText: "Reason for leave",
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  SizedBox(
-                    width: double.infinity,
-
-                    height: 55,
-
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xff1565C0),
-
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        studentName,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 17,
                         ),
                       ),
 
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Leave Request Submitted"),
-                          ),
-                        );
-                      },
+                      Text(
+                        className,
+                        style: GoogleFonts.poppins(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
 
-                      child: Text(
-                        "Submit Request",
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    status,
+                    style: GoogleFonts.poppins(
+                      color: statusColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
 
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
+            const SizedBox(height: 15),
 
-                          fontSize: 17,
+            Row(
+              children: [
+                const Icon(Icons.calendar_today, size: 18, color: Colors.blue),
+                const SizedBox(width: 8),
+                Text("$fromDate  →  $toDate", style: GoogleFonts.poppins()),
+              ],
+            ),
 
-                          fontWeight: FontWeight.w600,
+            const SizedBox(height: 12),
+
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.description, color: Colors.orange),
+                const SizedBox(width: 8),
+                Expanded(child: Text(reason, style: GoogleFonts.poppins())),
+              ],
+            ),
+
+            if (status == "Pending") ...[
+              const SizedBox(height: 18),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {},
+                      icon: const Icon(Icons.check),
+                      label: const Text("Approve"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {},
+                      icon: const Icon(Icons.close),
+                      label: const Text("Reject"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
                         ),
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
-
-            const SizedBox(height: 25),
-
-            Text(
-              "Leave History",
-
-              style: GoogleFonts.poppins(
-                fontSize: 22,
-
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            ListView.builder(
-              shrinkWrap: true,
-
-              physics: const NeverScrollableScrollPhysics(),
-
-              itemCount: leaveHistory.length,
-
-              itemBuilder: (context, index) {
-                var leave = leaveHistory[index];
-
-                return _leaveCard(leave);
-              },
-            ),
+            ],
           ],
         ),
       ),
     );
-  }
-
-  Widget _dateBox(String text, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(15),
-
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-
-        borderRadius: BorderRadius.circular(15),
-      ),
-
-      child: Row(
-        children: [
-          Icon(icon, color: const Color(0xff1565C0)),
-
-          const SizedBox(width: 12),
-
-          Text(text, style: GoogleFonts.poppins(color: Colors.grey)),
-        ],
-      ),
-    );
-  }
-
-  Widget _leaveCard(Map<String, String> leave) {
-    bool approved = leave["status"] == "Approved";
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-
-      padding: const EdgeInsets.all(18),
-
-      decoration: BoxDecoration(
-        color: Colors.white,
-
-        borderRadius: BorderRadius.circular(18),
-      ),
-
-      child: Row(
-        children: [
-          Container(
-            height: 45,
-
-            width: 45,
-
-            decoration: const BoxDecoration(
-              color: Color(0xffE3F2FD),
-
-              shape: BoxShape.circle,
-            ),
-
-            child: const Icon(Icons.event_note, color: Color(0xff1565C0)),
-          ),
-
-          const SizedBox(width: 15),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-
-              children: [
-                Text(
-                  leave["type"]!,
-
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-                ),
-
-                Text(
-                  leave["date"]!,
-
-                  style: GoogleFonts.poppins(color: Colors.grey, fontSize: 13),
-                ),
-              ],
-            ),
-          ),
-
-          Text(
-            leave["status"]!,
-
-            style: GoogleFonts.poppins(
-              color: approved ? Colors.green : Colors.red,
-
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  InputDecoration _inputDecoration() {
-    return InputDecoration(
-      filled: true,
-
-      fillColor: Colors.grey.shade100,
-
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15),
-
-        borderSide: BorderSide.none,
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    reasonController.dispose();
-
-    super.dispose();
   }
 }

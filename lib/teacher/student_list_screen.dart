@@ -2,7 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class StudentListScreen extends StatefulWidget {
-  const StudentListScreen({super.key});
+  final String className;
+  final String subject;
+  final String students;
+
+  const StudentListScreen({
+    super.key,
+    required this.className,    
+    required this.subject,
+    required this.students,     
+  });
 
   @override
   State<StudentListScreen> createState() => _StudentListScreenState();
@@ -101,7 +110,7 @@ class _StudentListScreenState extends State<StudentListScreen> {
 
                 children: [
                   Text(
-                    "Class 6 - A",
+                    widget.className,
 
                     style: GoogleFonts.poppins(
                       color: Colors.white,
@@ -113,7 +122,7 @@ class _StudentListScreenState extends State<StudentListScreen> {
                   ),
 
                   Text(
-                    "Mathematics • 42 Students",
+                    "${widget.subject} • ${widget.students} Students",
 
                     style: GoogleFonts.poppins(color: Colors.white70),
                   ),
