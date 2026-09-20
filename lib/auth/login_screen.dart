@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'otp_screen.dart';
+import 'package:dio/dio.dart';
+
+import 'package:teacher_app/home/teacher_home_screen.dart';
+import 'package:teacher_app/auth/auth_service.dart';
+import 'package:teacher_app/auth/auth_storage.dart';
+import 'package:teacher_app/auth/forgot_password_screen.dart';
+import 'package:teacher_app/auth/reset_password_screen.dart';
+import 'package:teacher_app/services/teacher_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -10,7 +17,14 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController mobileController = TextEditingController();
+  final TextEditingController usernameController = TextEditingController();
+
+  final TextEditingController passwordController = TextEditingController();
+
+  bool obscurePassword = true;
+  bool isLoading = false;
+
+  final AuthService authService = AuthService();
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +35,8 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              //================ HEADER =================//
+              // ================= HEADER =================
+
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.only(top: 40, bottom: 45),
@@ -42,6 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       height: 110,
                       width: 110,
+
                       decoration: BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
@@ -49,10 +65,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           BoxShadow(
                             color: Colors.black12,
                             blurRadius: 15,
-                            offset: Offset(0, 8),
+                            offset: const Offset(0, 8),
                           ),
                         ],
                       ),
+
                       child: const Icon(
                         Icons.school_rounded,
                         size: 60,
@@ -97,12 +114,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 25),
 
+              // ================= LOGIN CARD =================
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
 
                 child: Card(
                   elevation: 8,
                   shadowColor: Colors.blue.withOpacity(.2),
+
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(25),
                   ),
@@ -112,6 +131,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+
                       children: [
                         Text(
                           "Welcome 👋",
@@ -124,7 +144,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 8),
 
                         Text(
-                          "Login using your registered employee mobile number.",
+                          "Login using your employee username and password.",
                           style: GoogleFonts.poppins(
                             color: Colors.grey,
                             fontSize: 15,
@@ -133,8 +153,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         const SizedBox(height: 30),
 
+                        // ================= USERNAME =================
                         Text(
-                          "Mobile Number",
+                          "Username",
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.w600,
                           ),
@@ -143,21 +164,81 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 10),
 
                         TextField(
-                          controller: mobileController,
-                          keyboardType: TextInputType.phone,
-                          maxLength: 10,
+                          controller: usernameController,
+                          keyboardType: TextInputType.text,
+                          textInputAction: TextInputAction.next,
 
                           decoration: InputDecoration(
-                            counterText: "",
-
                             prefixIcon: const Icon(
-                              Icons.phone_android,
+                              Icons.person_outline_rounded,
                               color: Color(0xff1565C0),
                             ),
 
-                            prefixText: "+91 ",
+                            hintText: "Enter Username",
 
-                            hintText: "Enter Mobile Number",
+                            filled: true,
+                            fillColor: Colors.grey.shade100,
+
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(18),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(18),
+                              borderSide: const BorderSide(
+                                color: Color(0xff1565C0),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 22),
+
+                        // ================= PASSWORD =================
+                        Text(
+                          "Password",
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        TextField(
+                          controller: passwordController,
+                          obscureText: obscurePassword,
+                          textInputAction: TextInputAction.done,
+
+                          onSubmitted: (_) {
+                            _login();
+                          },
+
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(
+                              Icons.lock_outline_rounded,
+                              color: Color(0xff1565C0),
+                            ),
+
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                obscurePassword
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                                color: Colors.grey,
+                              ),
+
+                              onPressed: () {
+                                setState(() {
+                                  obscurePassword = !obscurePassword;
+                                });
+                              },
+                            ),
+
+                            hintText: "Enter Password",
 
                             filled: true,
                             fillColor: Colors.grey.shade100,
@@ -181,7 +262,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         const SizedBox(height: 30),
 
-                        //================ SEND OTP BUTTON =================//
+                        // ================= LOGIN BUTTON =================
                         SizedBox(
                           width: double.infinity,
                           height: 55,
@@ -196,47 +277,31 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
 
-                            onPressed: () {
-                              String mobile = mobileController.text.trim();
+                            onPressed: isLoading ? null : _login,
 
-                              if (mobile.length != 10) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      "Please enter valid mobile number",
-                                      style: GoogleFonts.poppins(),
+                            child: isLoading
+                                ? const SizedBox(
+                                    height: 25,
+                                    width: 25,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Colors.white,
                                     ),
-
-                                    backgroundColor: Colors.red,
+                                  )
+                                : Text(
+                                    "Login",
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
-                                );
-
-                                return;
-                              }
-
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      OtpScreen(mobileNumber: mobile),
-                                ),
-                              );
-                            },
-
-                            child: Text(
-                              "Send OTP",
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
                           ),
                         ),
 
                         const SizedBox(height: 30),
 
-                        //================ FEATURES =================//
+                        // ================= FEATURES =================
                         Text(
                           "Why SmartKids?",
                           style: GoogleFonts.poppins(
@@ -272,7 +337,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 25),
 
-              //================ FOOTER =================//
+              // ================= FOOTER =================
               Text(
                 "Powered by SmartKids Technologies",
                 style: GoogleFonts.poppins(
@@ -290,7 +355,219 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  //================ FEATURE TILE =================//
+  // ============================================================
+  // LOGIN
+  // ============================================================
+  Future<void> _login() async {
+    final username = usernameController.text.trim();
+    final password = passwordController.text.trim();
+
+    if (username.isEmpty) {
+      _showMessage("Please enter username", Colors.red);
+      return;
+    }
+
+    if (password.isEmpty) {
+      _showMessage("Please enter password", Colors.red);
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      // =========================================================
+      // LOGIN API
+      // =========================================================
+
+      final loginResponse = await authService.login(
+        username: username,
+        password: password,
+      );
+
+      // =========================================================
+      // LOGIN RESPONSE
+      // =========================================================
+
+      final token = loginResponse['token']?.toString();
+      final userId = loginResponse['userId'];
+      final loggedInUsername = loginResponse['username']?.toString();
+      final role = loginResponse['role']?.toString();
+
+      debugPrint("==========================================");
+      debugPrint("             LOGIN RESPONSE");
+      debugPrint("==========================================");
+      debugPrint("User ID  : $userId");
+      debugPrint("Username : $loggedInUsername");
+      debugPrint("Role     : $role");
+      debugPrint("==========================================");
+
+      // =========================================================
+      // TOKEN VALIDATION
+      // =========================================================
+
+      if (token == null || token.isEmpty) {
+        throw Exception("Login token not found.");
+      }
+
+      // =========================================================
+      // USER ID VALIDATION
+      // =========================================================
+
+      if (userId == null) {
+        throw Exception("User ID not found.");
+      }
+
+      final parsedUserId = int.tryParse(userId.toString());
+
+      if (parsedUserId == null) {
+        throw Exception("Invalid User ID.");
+      }
+
+      // =========================================================
+      // SAVE BASIC LOGIN DATA
+      // =========================================================
+
+      await AuthStorage.saveToken(token);
+
+      await AuthStorage.saveUserId(parsedUserId);
+
+      await AuthStorage.saveTeacherUsername(loggedInUsername ?? '');
+
+      await AuthStorage.saveTeacherRole(role ?? '');
+
+      // =========================================================
+      // TEACHER → FIND TEACHER ID USING USER ID
+      // =========================================================
+
+      if (role == 'TEACHER') {
+        debugPrint("Finding Teacher ID using User ID: $parsedUserId");
+
+        final teacherService = TeacherService(token);
+
+        final teacherData = await teacherService.getTeacherByUserId(
+          parsedUserId,
+        );
+
+        debugPrint("Teacher API Response: $teacherData");
+
+        // =======================================================
+        // GET TEACHER ID
+        // =======================================================
+
+        final teacherId = teacherData['id'];
+
+        if (teacherId == null) {
+          throw Exception("Teacher profile not found for this user.");
+        }
+
+        final parsedTeacherId = int.tryParse(teacherId.toString());
+
+        if (parsedTeacherId == null) {
+          throw Exception("Invalid Teacher ID.");
+        }
+
+        // =======================================================
+        // SAVE TEACHER ID
+        // =======================================================
+
+        await AuthStorage.saveTeacherId(parsedTeacherId);
+
+        debugPrint("==========================================");
+        debugPrint("       TEACHER ID FOUND");
+        debugPrint("==========================================");
+        debugPrint("User ID    : $parsedUserId");
+        debugPrint("Teacher ID : $parsedTeacherId");
+        debugPrint("Username   : $loggedInUsername");
+        debugPrint("Role       : $role");
+        debugPrint("==========================================");
+      }
+
+      // =========================================================
+      // LOGIN SUCCESS
+      // =========================================================
+
+      debugPrint("========== LOGIN SUCCESS ==========");
+
+      debugPrint("User ID: $parsedUserId");
+
+      debugPrint("Username: $loggedInUsername");
+
+      debugPrint("Role: $role");
+
+      // =========================================================
+      // NAVIGATION
+      // =========================================================
+
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const TeacherHomeScreen()),
+      );
+    }
+    // ==========================================================
+    // DIO ERROR
+    // ==========================================================
+    on DioException catch (e) {
+      debugPrint("LOGIN DIO ERROR: ${e.response?.data}");
+
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+
+      String message = "Login failed";
+
+      if (e.response?.data != null) {
+        if (e.response!.data is String) {
+          message = e.response!.data;
+        } else if (e.response!.data is Map &&
+            e.response!.data['message'] != null) {
+          message = e.response!.data['message'].toString();
+        }
+      }
+
+      _showMessage(message, Colors.red);
+    }
+    // ==========================================================
+    // GENERAL ERROR
+    // ==========================================================
+    catch (e, stackTrace) {
+      debugPrint("LOGIN ERROR: $e");
+
+      debugPrint("STACK TRACE: $stackTrace");
+
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+
+      _showMessage(e.toString().replaceFirst('Exception: ', ''), Colors.red);
+    }
+  } // ============================================================
+  // MESSAGE
+  // ============================================================
+
+  void _showMessage(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: GoogleFonts.poppins()),
+        backgroundColor: color,
+      ),
+    );
+  }
+
+  // ============================================================
+  // FEATURE TILE
+  // ============================================================
 
   Widget _featureTile(IconData icon, String title, String subtitle) {
     return Container(
@@ -300,7 +577,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
       decoration: BoxDecoration(
         color: Colors.blue.shade50,
-
         borderRadius: BorderRadius.circular(18),
       ),
 
@@ -308,12 +584,10 @@ class _LoginScreenState extends State<LoginScreen> {
         children: [
           Container(
             height: 45,
-
             width: 45,
 
             decoration: const BoxDecoration(
               color: Color(0xff1565C0),
-
               shape: BoxShape.circle,
             ),
 
@@ -329,17 +603,14 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 Text(
                   title,
-
                   style: GoogleFonts.poppins(
                     fontWeight: FontWeight.w600,
-
                     fontSize: 15,
                   ),
                 ),
 
                 Text(
                   subtitle,
-
                   style: GoogleFonts.poppins(color: Colors.grey, fontSize: 12),
                 ),
               ],
@@ -350,9 +621,14 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // ============================================================
+  // DISPOSE
+  // ============================================================
+
   @override
   void dispose() {
-    mobileController.dispose();
+    usernameController.dispose();
+    passwordController.dispose();
 
     super.dispose();
   }

@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:teacher_app/models/teacher_timetable_model.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:teacher_app/services/teacher_service.dart';
+import 'package:teacher_app/auth/auth_storage.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   const TeacherDashboardScreen({super.key});
@@ -9,6 +14,15 @@ class TeacherDashboardScreen extends StatefulWidget {
 }
 
 class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
+  List<TeacherTimetableModel> todayClasses = [];
+  bool isLoadingSchedule = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTodaySchedule();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -121,6 +135,78 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
+  Future<void> _loadTodaySchedule() async {
+    try {
+      print('========== token getting start ==========');
+      final token = await AuthStorage.getToken();
+      final teacherId = await AuthStorage.getTeacherId();
+      print('========== token got ==========');
+      print('token: $token');
+      print('Teacher ID: $teacherId');
+
+      if (token == null || token.isEmpty) {
+        print('JWT token not found');
+
+        if (mounted) {
+          setState(() {
+            isLoadingSchedule = false;
+          });
+        }
+
+        return;
+      }
+
+      if (teacherId == null) {
+        print('Teacher ID not found');
+
+        if (mounted) {
+          setState(() {
+            isLoadingSchedule = false;
+          });
+        }
+
+        return;
+      }
+
+      final teacherService = TeacherService(token);
+
+      final timetable = await teacherService.getTodayTimetable(teacherId);
+      print('========== TODAY TIMETABLE ==========');
+      print('Teacher ID: $teacherId');
+      print('Today: ${DateTime.now().weekday}');
+      print('Timetable count: ${timetable.length}');
+
+      for (final item in timetable) {
+        print(
+          '${item.dayOfWeek} | '
+          '${item.startTime} - ${item.endTime} | '
+          '${item.className} | '
+          '${item.sectionName} | '
+          '${item.subjectName}',
+        );
+      }
+      print('======================================');
+
+      // Sort by start time
+      timetable.sort((a, b) => a.startTime.compareTo(b.startTime));
+
+      if (mounted) {
+        setState(() {
+          todayClasses = timetable;
+          isLoadingSchedule = false;
+        });
+      }
+    } catch (e) {
+      print('TODAY TIMETABLE ERROR: $e');
+
+      if (mounted) {
+        setState(() {
+          isLoadingSchedule = false;
+        });
+      }
+    }
+  }
+
   Widget _summaryGrid() {
     return GridView.count(
       crossAxisCount: 2,
@@ -136,13 +222,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       childAspectRatio: 1.35,
 
       children: [
-        _summaryCard(Icons.class_, "Today's Classes", "5", Colors.blue),
-
-        _summaryCard(Icons.people, "Students", "165", Colors.green),
-
-        _summaryCard(Icons.assignment, "Homework", "8", Colors.orange),
-
-        _summaryCard(Icons.event_busy, "Leave", "2", Colors.red),
+        _summaryCard(
+          Icons.class_,
+          "Today's Classes",
+          todayClasses.length.toString(),
+          Colors.blue,
+        ),
       ],
     );
   }
@@ -200,33 +285,50 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       children: [
         Text(
           "Today's Schedule",
-
           style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold),
         ),
 
         const SizedBox(height: 15),
 
-        _scheduleTile("09:00 AM", "Class 6 - A", "Mathematics"),
-
-        _scheduleTile("10:00 AM", "Class 7 - B", "Algebra"),
-
-        _scheduleTile("11:00 AM", "Class 8 - A", "Geometry"),
+        if (isLoadingSchedule)
+          const Center(child: CircularProgressIndicator())
+        else if (todayClasses.isEmpty)
+          const Text("No classes scheduled for today.")
+        else
+          ...todayClasses.map(
+            (item) => _scheduleTile(
+              item.startTime,
+              item.endTime,
+              item.className,
+              item.sectionName,
+              item.subjectName,
+              item.roomNumber,
+            ),
+          ),
       ],
     );
   }
 
-  Widget _scheduleTile(String time, String className, String subject) {
+  Widget _scheduleTile(
+    String startTime,
+    String endTime,
+    String className,
+    String? sectionName,
+    String subject,
+    String? roomNumber,
+  ) {
+    final sectionText = sectionName == null || sectionName.isEmpty
+        ? className
+        : '$className - $sectionName';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: const Color(0xffE3F2FD),
-
           child: Text(
-            time.substring(0, 2),
+            startTime.length >= 2 ? startTime.substring(0, 2) : startTime,
             style: const TextStyle(
               color: Color(0xff1565C0),
               fontWeight: FontWeight.bold,
@@ -236,11 +338,34 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
         title: Text(
           subject,
-
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
         ),
 
-        subtitle: Text(className),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(sectionText),
+
+            const SizedBox(height: 3),
+
+            Text(
+              '$startTime - $endTime',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+              ),
+            ),
+
+            if (roomNumber != null && roomNumber.isNotEmpty)
+              Text(
+                'Room: $roomNumber',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+          ],
+        ),
 
         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
       ),

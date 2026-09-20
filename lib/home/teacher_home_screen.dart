@@ -1,19 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:teacher_app/teacher/student_list_screen.dart';
-import 'package:teacher_app/teacher/assignments_screen.dart';
-import 'package:teacher_app/teacher/attendance_screen.dart';
+
+import 'package:teacher_app/auth/auth_storage.dart';
+import 'package:teacher_app/models/teacher_timetable_model.dart';
+import 'package:teacher_app/services/teacher_service.dart';
+
 import 'package:teacher_app/teacher/timetable_screen.dart';
-import 'package:teacher_app/teacher/marks_entry_screen.dart';
 import 'package:teacher_app/teacher/my_classes_screen.dart';
 import 'package:teacher_app/teacher/teacher_profile_screen.dart';
-import 'package:teacher_app/teacher/homework_screen.dart';
-import 'package:teacher_app/teacher/my_classes_screen.dart';
-import 'package:teacher_app/teacher/homework_screen.dart';
 import 'package:teacher_app/teacher/leave_request_screen.dart';
-import 'package:teacher_app/teacher/dashboard/teacher_dashboard_screen.dart';
 import 'package:teacher_app/teacher/class_workspace_screen.dart';
-import 'dart:async';
+import 'package:teacher_app/teacher/exams_screen.dart';
 
 class TeacherHomeScreen extends StatefulWidget {
   const TeacherHomeScreen({super.key});
@@ -23,434 +20,432 @@ class TeacherHomeScreen extends StatefulWidget {
 }
 
 class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
-  int selectedIndex = 0;
-  int _selectedIndexForButtom = 0;
-  final PageController _pageController = PageController();
+  static const Color primaryColor = Color(0xff1565C0);
+  static const Color backgroundColor = Color(0xffF5F8FC);
 
-  final List<String> banners = [
-    "https://picsum.photos/800/300?random=1",
-    "https://picsum.photos/800/300?random=2",
-    "https://picsum.photos/800/300?random=3",
-    "https://picsum.photos/800/300?random=4",
-  ];
-  int currentPage = 0;
+  int _selectedIndex = 0;
+
+  String teacherName = 'Teacher';
+
+  List<TeacherTimetableModel> todayClasses = [];
+  bool isLoadingTodayClasses = true;
 
   @override
   void initState() {
     super.initState();
-
-    Timer.periodic(const Duration(seconds: 3), (timer) {
-      if (_pageController.hasClients) {
-        currentPage++;
-
-        if (currentPage >= banners.length) {
-          currentPage = 0;
-        }
-
-        _pageController.animateToPage(
-          currentPage,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeInOut,
-        );
-      }
-    });
+    _loadTeacherName();
+    _loadTodayClasses();
   }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xffF5F8FC),
-      appBar: AppBar(
-        elevation: 0,
+      backgroundColor: backgroundColor,
+      body: SafeArea(
+        child: _buildBody(),
+      ),
+      bottomNavigationBar: _buildBottomNavigation(),
+    );
+  }
 
-        backgroundColor: Colors.white,
-        centerTitle: true,
+  // ============================================================
+  // BODY
+  // ============================================================
 
-        leadingWidth: 70,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 15),
-          child: GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const TeacherProfileScreen()),
-              );
-            },
-            child: const CircleAvatar(
-              radius: 22,
-              backgroundImage: NetworkImage("https://i.pravatar.cc/150?img=12"),
+  Widget _buildBody() {
+    if (_selectedIndex == 1) {
+      return const MyClassesScreen();
+    }
+
+    if (_selectedIndex == 2) {
+      return const TeacherProfileScreen();
+    }
+
+    return _buildHome();
+  }
+
+  // ============================================================
+  // HOME
+  // ============================================================
+
+  Widget _buildHome() {
+    return RefreshIndicator(
+      onRefresh: () async {
+        await _loadTodayClasses();
+        await _loadTeacherName();
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(),
+
+            const SizedBox(height: 24),
+
+            _buildTodaySummary(),
+
+            const SizedBox(height: 28),
+
+            _buildSectionTitle(
+              title: 'Quick Access',
+              subtitle: 'Manage your daily activities',
+            ),
+
+            const SizedBox(height: 14),
+
+            _buildQuickActions(),
+
+            const SizedBox(height: 30),
+
+            _buildSectionTitle(
+              title: "Today's Classes",
+              subtitle: 'Your scheduled classes for today',
+            ),
+
+            const SizedBox(height: 14),
+
+            _buildTodayClasses(),
+
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // HEADER
+  // ============================================================
+
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _selectedIndex = 2;
+            });
+          },
+          child: Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: const Color(0xffE3F2FD),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.person,
+              color: primaryColor,
+              size: 28,
             ),
           ),
         ),
 
-        title: const Text(
-          "SmartKids",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        const SizedBox(width: 14),
+
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _getGreeting(),
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                teacherName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xff172033),
+                ),
+              ),
+            ],
+          ),
         ),
 
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 15),
-            child: Stack(
-              children: [
-                IconButton(
-                  onPressed: () {
-                    // Navigator.push(
-                    //   context,
-                    //   MaterialPageRoute(
-                    //     builder: (_) => const NotificationsScreen(),
-                    //   ),
-                    // );
-                  },
-                  icon: const Icon(Icons.notifications, color: Colors.blue),
-                ),
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: const Color(0xffE7ECF3),
+            ),
+          ),
+          child: IconButton(
+            onPressed: () {
+              // Notifications can be connected later.
+            },
+            icon: const Icon(
+              Icons.notifications_none_rounded,
+              color: primaryColor,
+              size: 25,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
-                Positioned(
-                  right: 5,
-                  top: 8,
-                  child: Container(
-                    height: 18,
-                    width: 18,
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Center(
-                      child: Text(
-                        "3",
-                        style: TextStyle(color: Colors.white, fontSize: 11),
-                      ),
-                    ),
+  // ============================================================
+  // TODAY SUMMARY
+  // ============================================================
+
+  Widget _buildTodaySummary() {
+    final count = todayClasses.length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: primaryColor,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withOpacity(0.18),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(17),
+            ),
+            child: const Icon(
+              Icons.calendar_today_rounded,
+              color: Colors.white,
+              size: 29,
+            ),
+          ),
+
+          const SizedBox(width: 16),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Today's Overview",
+                  style: GoogleFonts.poppins(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  isLoadingTodayClasses
+                      ? 'Loading your classes...'
+                      : count == 0
+                          ? 'No classes scheduled today'
+                          : '$count ${count == 1 ? 'class' : 'classes'} scheduled today',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
             ),
           ),
+
+          if (!isLoadingTodayClasses)
+            Text(
+              '$count',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 30,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
         ],
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
+    );
+  }
+
+  // ============================================================
+  // SECTION TITLE
+  // ============================================================
+
+  Widget _buildSectionTitle({
+    required String title,
+    required String subtitle,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: GoogleFonts.poppins(
+            fontSize: 19,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xff172033),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          subtitle,
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            color: Colors.grey.shade600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // QUICK ACTIONS
+  // ============================================================
+
+  Widget _buildQuickActions() {
+    return GridView.count(
+      crossAxisCount: 2,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      childAspectRatio: 1.65,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      children: [
+        _quickActionCard(
+          icon: Icons.calendar_month_rounded,
+          title: 'Timetable',
+          subtitle: 'View schedule',
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const TimetableScreen(),
+              ),
+            );
+          },
+        ),
+
+        _quickActionCard(
+          icon: Icons.menu_book_rounded,
+          title: 'Exams',
+          subtitle: 'Exams & marks',
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ExamsScreen(),
+              ),
+            );
+          },
+        ),
+
+        _quickActionCard(
+          icon: Icons.class_rounded,
+          title: 'My Classes',
+          subtitle: 'Students & classes',
+          onTap: () {
+            setState(() {
+              _selectedIndex = 1;
+            });
+          },
+        ),
+
+        _quickActionCard(
+          icon: Icons.event_available_rounded,
+          title: 'Leave Request',
+          subtitle: 'Apply for leave',
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const LeaveRequestScreen(),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _quickActionCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: const Color(0xffE8EDF4),
+            ),
+          ),
+          child: Row(
             children: [
-              //================ HEADER =================//
-              // Container(
-              //   padding: const EdgeInsets.only(
-              //     left: 20,
-              //     right: 20,
-              //     top: 30,
-              //     bottom: 35,
-              //   ),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xffE3F2FD),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(
+                  icon,
+                  color: primaryColor,
+                  size: 23,
+                ),
+              ),
 
-              //   decoration: const BoxDecoration(
-              //     gradient: LinearGradient(
-              //       colors: [Color(0xff1565C0), Color(0xff42A5F5)],
+              const SizedBox(width: 11),
 
-              //       begin: Alignment.topLeft,
-
-              //       end: Alignment.bottomRight,
-              //     ),
-
-              //     borderRadius: BorderRadius.only(
-              //       bottomLeft: Radius.circular(35),
-
-              //       bottomRight: Radius.circular(35),
-              //     ),
-              //   ),
-
-              //   child: Column(
-              //     children: [
-              //       Row(
-              //         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-
-              //         children: [
-              //           Column(
-              //             crossAxisAlignment: CrossAxisAlignment.start,
-
-              //             children: [
-              //               Text(
-              //                 "Good Morning 👋",
-
-              //                 style: GoogleFonts.poppins(
-              //                   color: Colors.white70,
-
-              //                   fontSize: 15,
-              //                 ),
-              //               ),
-
-              //               Text(
-              //                 "Mrs. Anitha",
-
-              //                 style: GoogleFonts.poppins(
-              //                   color: Colors.white,
-
-              //                   fontSize: 26,
-
-              //                   fontWeight: FontWeight.bold,
-              //                 ),
-              //               ),
-
-              //               Text(
-              //                 "Mathematics Teacher",
-
-              //                 style: GoogleFonts.poppins(color: Colors.white70),
-              //               ),
-              //             ],
-              //           ),
-
-              //           GestureDetector(
-              //             onTap: () {
-              //               Navigator.push(
-              //                 context,
-              //                 MaterialPageRoute(
-              //                   builder: (_) => const TeacherProfileScreen(),
-              //                 ),
-              //               );
-              //             },
-              //             child: const CircleAvatar(
-              //               radius: 30,
-              //               backgroundColor: Colors.white,
-              //               child: Icon(
-              //                 Icons.person,
-              //                 size: 40,
-              //                 color: Color(0xff1565C0),
-              //               ),
-              //             ),
-              //           ),
-              //         ],
-              //       ),
-              //     ],
-              //   ),
-              // ),
-             
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-
+              Expanded(
                 child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
-
                   children: [
-                    SizedBox(
-                      height: 220,
-                      child: PageView.builder(
-                        controller: _pageController,
-                        itemCount: banners.length,
-                        itemBuilder: (context, index) {
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 20),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              image: DecorationImage(
-                                image: NetworkImage(banners[index]),
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
                     Text(
-                      "Today's Birthdays",
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.poppins(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xff172033),
                       ),
                     ),
-
-                    const SizedBox(height: 15),
-
-                    // SizedBox(
-                    //   height: 95,
-                    //   child: ListView(
-                    //     scrollDirection: Axis.horizontal,
-                    //     children: [
-                    //       _birthdayStory(
-                    //         "Rahul",
-                    //         "assets/images/students/rahul.jpg",
-                    //       ),
-                    //       _birthdayStory(
-                    //         "Sneha",
-                    //         "assets/images/students/sneha.jpg",
-                    //       ),
-                    //       _birthdayStory(
-                    //         "Arjun",
-                    //         "assets/images/students/arjun.jpg",
-                    //       ),
-                    //       _birthdayStory(
-                    //         "Anjali",
-                    //         "assets/images/students/anjali.jpg",
-                    //       ),
-                    //       _birthdayStory(
-                    //         "Vikram",
-                    //         "assets/images/students/vikram.jpg",
-                    //       ),
-                    //     ],
-                    //   ),
-                    // ),
-                    SizedBox(
-                      height: 110,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: [
-                          _birthdayStory(
-                            "Keerthi",
-                            "https://i.pravatar.cc/150?img=45",
-                          ),
-
-                          _birthdayStory(
-                            "Rahul",
-                            "https://i.pravatar.cc/150?img=12",
-                          ),
-
-                          _birthdayStory(
-                            "Ananya",
-                            "https://i.pravatar.cc/150?img=32",
-                          ),
-
-                          _birthdayStory(
-                            "Arjun",
-                            "https://i.pravatar.cc/150?img=60",
-                          ),
-                          _birthdayStory(
-                            "vijay",
-                            "https://i.pravatar.cc/150?img=12",
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 25),
+                    const SizedBox(height: 2),
                     Text(
-                      "Quick Actions",
-
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.poppins(
-                        fontSize: 22,
-
-                        fontWeight: FontWeight.bold,
+                        fontSize: 10,
+                        color: Colors.grey.shade600,
                       ),
                     ),
-
-                    const SizedBox(height: 15),
-
-                    GridView.count(
-                      shrinkWrap: true,
-
-                      physics: const NeverScrollableScrollPhysics(),
-
-                      crossAxisCount: 3,
-
-                      crossAxisSpacing: 12,
-
-                      mainAxisSpacing: 12,
-
-                      children: [
-                        InkWell(
-                          onTap: () {
-                            // Navigator.push(
-                            //   context,
-                            //   MaterialPageRoute(
-                            //     builder: (_) => const MarksEntryScreen(),
-                            //   ),
-                            // );
-                          },
-                          child: _actionCard(Icons.grade, "Birthdays"),
-                        ),
-                        InkWell(
-                          onTap: () {
-                            // Navigator.push(
-                            //   context,
-                            //   MaterialPageRoute(
-                            //     builder: (_) => const MarksEntryScreen(),
-                            //   ),
-                            // );
-                          },
-                          child: _actionCard(Icons.grade, "Achievements"),
-                        ),
-                        InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const TimetableScreen(),
-                              ),
-                            );
-                          },
-                          child: _actionCard(Icons.event_note, "Timetable"),
-                        ),
-
-                        InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const LeaveRequestScreen(),
-                              ),
-                            );
-                          },
-                          child: _actionCard(
-                            Icons.notifications,
-                            "Leave Requests",
-                          ),
-                        ),
-
-                        InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const MarksEntryScreen(),
-                              ),
-                            );
-                          },
-                          child: _actionCard(Icons.grade, "Announcements"),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 25),
-                    const SizedBox(height: 25),
-
-                    Text(
-                      "Today's Classes",
-
-                      style: GoogleFonts.poppins(
-                        fontSize: 22,
-
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    _classCard(
-                      context,
-                      "Class 6 - A",
-                      "Mathematics",
-                      "10:00 AM",
-                      "42",
-                    ),
-
-                    _classCard(
-                      context,
-                      "Class 7 - B",
-                      "Algebra",
-                      "12:00 PM",
-                      "38",
-                    ),
-
-                    _classCard(
-                      context,
-                      "Class 8 - A",
-                      "Geometry",
-                      "02:00 PM",
-                      "45",
-                    ),
-
-                    const SizedBox(height: 25),
-
-                    // _dashboardStats(),
                   ],
                 ),
               ),
@@ -458,204 +453,418 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
           ),
         ),
       ),
-
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndexForButtom,
-
-        onTap: (index) {
-          setState(() {
-            _selectedIndexForButtom = index;
-          });
-
-          if (index == 0) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const TeacherHomeScreen()),
-            );
-          } else if (index == 1) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AssignmentsScreen()),
-            );
-          } else if (index == 2) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const MyClassesScreen()),
-            );
-          }
-        },
-
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.assignment), label: "Tasks"),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Myclasses"),
-        ],
-      ),
     );
   }
 
-  Widget _actionCard(IconData icon, String title) {
+  // ============================================================
+  // TODAY'S CLASSES
+  // ============================================================
+
+  Widget _buildTodayClasses() {
+    if (isLoadingTodayClasses) {
+      return _buildLoadingCard();
+    }
+
+    if (todayClasses.isEmpty) {
+      return _buildEmptyClassesCard();
+    }
+
+    return Column(
+      children: todayClasses.map((item) {
+        final className = _buildClassName(item);
+
+        return _todayClassCard(
+          item: item,
+          className: className,
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _todayClassCard({
+    required TeacherTimetableModel item,
+    required String className,
+  }) {
     return Container(
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-
-        borderRadius: BorderRadius.circular(18),
-
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8)],
+        borderRadius: BorderRadius.circular(19),
+        border: Border.all(
+          color: const Color(0xffE8EDF4),
+        ),
       ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(19),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ClassWorkspaceScreen(
+                  classId: item.classId,
+                  className: className,
+                  subject: item.subjectName,
+                  students: '-',
+                ),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(15),
+            child: Row(
+              children: [
+                Container(
+                  width: 62,
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  decoration: BoxDecoration(
+                    color: const Color(0xffE3F2FD),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        _formatTime(item.startTime),
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: primaryColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Icon(
+                        Icons.access_time_rounded,
+                        color: primaryColor,
+                        size: 16,
+                      ),
+                    ],
+                  ),
+                ),
 
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+                const SizedBox(width: 14),
 
-        children: [
-          Icon(icon, color: Color(0xff1565C0), size: 30),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.subjectName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xff172033),
+                        ),
+                      ),
 
-          const SizedBox(height: 8),
+                      const SizedBox(height: 4),
 
-          Text(
-            title,
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.school_outlined,
+                            size: 15,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              className,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
 
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-
-              fontWeight: FontWeight.w600,
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: Colors.grey,
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _birthdayStory(String name, String imageUrl) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 15),
+  // ============================================================
+  // LOADING CARD
+  // ============================================================
+
+  Widget _buildLoadingCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(19),
+        border: Border.all(
+          color: const Color(0xffE8EDF4),
+        ),
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 25,
+          height: 25,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            color: primaryColor,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // EMPTY CLASSES
+  // ============================================================
+
+  Widget _buildEmptyClassesCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 20,
+        vertical: 28,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(19),
+        border: Border.all(
+          color: const Color(0xffE8EDF4),
+        ),
+      ),
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(3),
+            width: 58,
+            height: 58,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.pink, width: 3),
+              color: const Color(0xffF1F5F9),
+              borderRadius: BorderRadius.circular(18),
             ),
-            child: CircleAvatar(
-              radius: 28,
-              backgroundImage: NetworkImage(imageUrl),
-            ),
-          ),
-          const SizedBox(height: 6),
-          SizedBox(
-            width: 60,
-            child: Text(
-              name,
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
+            child: const Icon(
+              Icons.event_busy_rounded,
+              color: Colors.grey,
+              size: 28,
             ),
           ),
-        ],
-      ),
-    );
-  }
 
-  Widget _statCard(String title, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6)],
-      ),
-      child: Column(
-        children: [
-          CircleAvatar(
-            backgroundColor: color.withOpacity(0.1),
-            child: Icon(icon, color: color),
-          ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
+
           Text(
-            value,
+            'No classes today',
             style: GoogleFonts.poppins(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xff172033),
             ),
           ),
-          Text(title, style: GoogleFonts.poppins(color: Colors.grey)),
+
+          const SizedBox(height: 4),
+
+          Text(
+            'You have no scheduled classes for today.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              color: Colors.grey.shade600,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _classCard(
-    BuildContext context,
-    String className,
-    String subject,
-    String time,
-    String students,
-  ) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
+  // ============================================================
+  // BOTTOM NAVIGATION
+  // ============================================================
 
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ClassWorkspaceScreen(
-              className: className,
-              subject: subject,
-              students: students,
-            ),
-          ),
-        );
+  Widget _buildBottomNavigation() {
+    return NavigationBar(
+      height: 72,
+      selectedIndex: _selectedIndex,
+      onDestinationSelected: (index) {
+        setState(() {
+          _selectedIndex = index;
+        });
       },
-
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-
-        padding: const EdgeInsets.all(15),
-
-        decoration: BoxDecoration(
-          color: Colors.white,
-
-          borderRadius: BorderRadius.circular(18),
+      backgroundColor: Colors.white,
+      indicatorColor: const Color(0xffE3F2FD),
+      elevation: 8,
+      destinations: [
+        NavigationDestination(
+          icon: const Icon(Icons.home_outlined),
+          selectedIcon: const Icon(
+            Icons.home_rounded,
+            color: primaryColor,
+          ),
+          label: 'Home',
         ),
-
-        child: Row(
-          children: [
-            const CircleAvatar(
-              backgroundColor: Color(0xffE3F2FD),
-
-              child: Icon(Icons.school, color: Color(0xff1565C0)),
-            ),
-
-            const SizedBox(width: 15),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-
-                children: [
-                  Text(
-                    className,
-
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-                  ),
-
-                  Text(subject, style: GoogleFonts.poppins(color: Colors.grey)),
-                ],
-              ),
-            ),
-
-            Text(
-              time,
-
-              style: GoogleFonts.poppins(
-                color: Color(0xff1565C0),
-
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
+        NavigationDestination(
+          icon: const Icon(Icons.class_outlined),
+          selectedIcon: const Icon(
+            Icons.class_rounded,
+            color: primaryColor,
+          ),
+          label: 'My Classes',
         ),
-      ),
+        NavigationDestination(
+          icon: const Icon(Icons.person_outline_rounded),
+          selectedIcon: const Icon(
+            Icons.person_rounded,
+            color: primaryColor,
+          ),
+          label: 'Profile',
+        ),
+      ],
     );
+  }
+
+  // ============================================================
+  // LOAD TEACHER NAME
+  // ============================================================
+
+  Future<void> _loadTeacherName() async {
+    try {
+      final username = await AuthStorage.getTeacherUsername();
+
+      if (!mounted) return;
+
+      if (username != null && username.trim().isNotEmpty) {
+        setState(() {
+          teacherName = username.trim();
+        });
+      }
+    } catch (e) {
+      debugPrint('TEACHER NAME ERROR: $e');
+    }
+  }
+
+  // ============================================================
+  // LOAD TODAY CLASSES
+  // ============================================================
+
+  Future<void> _loadTodayClasses() async {
+    try {
+      if (mounted) {
+        setState(() {
+          isLoadingTodayClasses = true;
+        });
+      }
+
+      final token = await AuthStorage.getToken();
+      final teacherId = await AuthStorage.getTeacherId();
+
+      if (token == null ||
+          token.isEmpty ||
+          teacherId == null) {
+        if (!mounted) return;
+
+        setState(() {
+          todayClasses = [];
+          isLoadingTodayClasses = false;
+        });
+
+        return;
+      }
+
+      final teacherService = TeacherService(token);
+
+      final timetable =
+          await teacherService.getTodayTimetable(teacherId);
+
+      timetable.sort(
+        (a, b) => a.startTime.compareTo(b.startTime),
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        todayClasses = timetable;
+        isLoadingTodayClasses = false;
+      });
+    } catch (e) {
+      debugPrint('TODAY CLASSES ERROR: $e');
+
+      if (!mounted) return;
+
+      setState(() {
+        todayClasses = [];
+        isLoadingTodayClasses = false;
+      });
+    }
+  }
+
+  // ============================================================
+  // CLASS NAME
+  // ============================================================
+
+  String _buildClassName(TeacherTimetableModel item) {
+    if (item.sectionName == null ||
+        item.sectionName!.trim().isEmpty) {
+      return item.className;
+    }
+
+    return '${item.className} - ${item.sectionName}';
+  }
+
+  // ============================================================
+  // TIME FORMAT
+  // ============================================================
+
+  String _formatTime(String time) {
+    try {
+      final parts = time.split(':');
+
+      if (parts.length < 2) {
+        return time;
+      }
+
+      int hour = int.parse(parts[0]);
+      final minute = parts[1];
+
+      final period = hour >= 12 ? 'PM' : 'AM';
+
+      hour = hour % 12;
+
+      if (hour == 0) {
+        hour = 12;
+      }
+
+      return '$hour:$minute $period';
+    } catch (e) {
+      return time;
+    }
+  }
+
+  // ============================================================
+  // GREETING
+  // ============================================================
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+
+    if (hour < 12) {
+      return 'Good Morning 👋';
+    }
+
+    if (hour < 17) {
+      return 'Good Afternoon 👋';
+    }
+
+    return 'Good Evening 👋';
   }
 }
