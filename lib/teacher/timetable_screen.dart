@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:teacher_app/auth/auth_storage.dart';
+import 'package:teacher_app/models/teacher_timetable_model.dart';
+import 'package:teacher_app/services/teacher_service.dart';
+
 class TimetableScreen extends StatefulWidget {
   const TimetableScreen({super.key});
 
@@ -18,49 +22,232 @@ class _TimetableScreenState extends State<TimetableScreen> {
     "Thursday",
     "Friday",
     "Saturday",
+    "Sunday",
   ];
 
-  final Map<String, List<Map<String, String>>> timetable = {
-    "Monday": [
-      {"time": "09:00 AM", "class": "Class 6 - A", "subject": "Mathematics"},
+  List<TeacherTimetableModel> timetable = [];
 
-      {"time": "10:00 AM", "class": "Class 7 - B", "subject": "Algebra"},
+  bool isLoading = true;
+  String? errorMessage;
 
-      {"time": "12:00 PM", "class": "Class 8 - A", "subject": "Geometry"},
+  @override
+  void initState() {
+    super.initState();
 
-      {"time": "02:00 PM", "class": "Class 9 - B", "subject": "Mathematics"},
-    ],
+    // Open today's day by default
+    selectedDay = _getTodayDisplayDay();
 
-    "Tuesday": [
-      {"time": "09:00 AM", "class": "Class 6 - A", "subject": "Mathematics"},
+    _loadTimetable();
+  }
 
-      {"time": "11:00 AM", "class": "Class 8 - A", "subject": "Statistics"},
+  // ============================================================
+  // LOAD COMPLETE TEACHER TIMETABLE
+  // ============================================================
+  Future<void> _loadTimetable() async {
+    try {
+      final token = await AuthStorage.getToken();
+      final userId = await AuthStorage.getUserId();
+      final teacherId = await AuthStorage.getTeacherId();
 
-      {"time": "01:00 PM", "class": "Class 7 - B", "subject": "Practice"},
-    ],
+      debugPrint("==========================================");
+      debugPrint("           TIMETABLE LOAD");
+      debugPrint("==========================================");
+      debugPrint("User ID    : $userId");
+      debugPrint("Teacher ID : $teacherId");
+      debugPrint("Token      : ${token != null && token.isNotEmpty}");
+      debugPrint("==========================================");
 
-    "Wednesday": [
-      {"time": "10:00 AM", "class": "Class 9 - B", "subject": "Algebra"},
+      if (token == null || token.isEmpty) {
+        if (!mounted) return;
 
-      {"time": "12:00 PM", "class": "Class 6 - A", "subject": "Revision"},
-    ],
+        setState(() {
+          isLoading = false;
+          errorMessage = "Login session expired.";
+        });
 
-    "Thursday": [
-      {"time": "09:30 AM", "class": "Class 7 - B", "subject": "Mathematics"},
+        return;
+      }
 
-      {"time": "02:00 PM", "class": "Class 8 - A", "subject": "Geometry"},
-    ],
+      if (teacherId == null) {
+        if (!mounted) return;
 
-    "Friday": [
-      {"time": "10:00 AM", "class": "Class 6 - A", "subject": "Test"},
+        setState(() {
+          isLoading = false;
+          errorMessage = "Teacher ID not found.";
+        });
 
-      {"time": "12:00 PM", "class": "Class 9 - B", "subject": "Mathematics"},
-    ],
+        return;
+      }
 
-    "Saturday": [
-      {"time": "09:00 AM", "class": "Class 8 - A", "subject": "Doubt Session"},
-    ],
-  };
+      final teacherService = TeacherService(token);
+
+      debugPrint("Calling timetable API with Teacher ID: $teacherId");
+
+      final data = await teacherService.getTeacherTimetable(teacherId);
+
+      debugPrint("==========================================");
+      debugPrint("       API TIMETABLE RESPONSE");
+      debugPrint("==========================================");
+      debugPrint("Teacher ID : $teacherId");
+      debugPrint("Records    : ${data.length}");
+
+      for (final item in data) {
+        debugPrint(
+          "DAY=${item.dayOfWeek}, "
+          "SUBJECT=${item.subjectName}, "
+          "CLASS=${item.className}, "
+          "SECTION=${item.sectionName}, "
+          "START=${item.startTime}, "
+          "END=${item.endTime}",
+        );
+      }
+
+      debugPrint("==========================================");
+
+      data.sort((a, b) {
+        final dayCompare = _dayOrder(
+          a.dayOfWeek,
+        ).compareTo(_dayOrder(b.dayOfWeek));
+
+        if (dayCompare != 0) {
+          return dayCompare;
+        }
+
+        return a.startTime.compareTo(b.startTime);
+      });
+
+      if (!mounted) return;
+
+      setState(() {
+        timetable = data;
+        isLoading = false;
+        errorMessage = null;
+      });
+    } catch (e, stackTrace) {
+      debugPrint("==========================================");
+      debugPrint("FULL TIMETABLE ERROR");
+      debugPrint("$e");
+      debugPrint("$stackTrace");
+      debugPrint("==========================================");
+
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+        errorMessage = "Failed to load timetable.";
+      });
+    }
+  }
+
+  // ============================================================
+  // GET SELECTED DAY CLASSES
+  // ============================================================
+  List<TeacherTimetableModel> get selectedDayClasses {
+    final backendDay = _convertToBackendDay(selectedDay);
+
+    debugPrint("========== TIMETABLE FILTER ==========");
+    debugPrint("Selected Day: $selectedDay");
+    debugPrint("Backend Day: $backendDay");
+    debugPrint("Total Timetable Records: ${timetable.length}");
+
+    for (final item in timetable) {
+      debugPrint(
+        "API ITEM => dayOfWeek=[${item.dayOfWeek}], "
+        "subject=[${item.subjectName}], "
+        "start=[${item.startTime}], "
+        "class=[${item.className}]",
+      );
+    }
+
+    final result = timetable.where((item) {
+      final itemDay = item.dayOfWeek.trim().toUpperCase();
+
+      debugPrint(
+        "COMPARE => itemDay=[$itemDay] == backendDay=[$backendDay] "
+        "=> ${itemDay == backendDay}",
+      );
+
+      return itemDay == backendDay;
+    }).toList();
+
+    result.sort((a, b) => a.startTime.compareTo(b.startTime));
+
+    debugPrint("Filtered Records: ${result.length}");
+
+    return result;
+  }
+  // ============================================================
+  // TODAY
+  // ============================================================
+
+  String _getTodayDisplayDay() {
+    const days = [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ];
+
+    return days[DateTime.now().weekday - 1];
+  }
+
+  // ============================================================
+  // FRONTEND DAY -> BACKEND DAY
+  // ============================================================
+
+  String _convertToBackendDay(String day) {
+    return day.toUpperCase();
+  }
+
+  // ============================================================
+  // DAY ORDER
+  // ============================================================
+
+  int _dayOrder(String day) {
+    const order = {
+      "MONDAY": 1,
+      "TUESDAY": 2,
+      "WEDNESDAY": 3,
+      "THURSDAY": 4,
+      "FRIDAY": 5,
+      "SATURDAY": 6,
+      "SUNDAY": 7,
+    };
+
+    return order[day.toUpperCase()] ?? 99;
+  }
+
+  // ============================================================
+  // TIME FORMAT
+  // ============================================================
+
+  String _formatTime(String time) {
+    try {
+      final parts = time.split(':');
+
+      int hour = int.parse(parts[0]);
+      final minute = parts[1];
+
+      final period = hour >= 12 ? 'PM' : 'AM';
+
+      hour = hour % 12;
+
+      if (hour == 0) {
+        hour = 12;
+      }
+
+      return '$hour:$minute $period';
+    } catch (e) {
+      return time;
+    }
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -69,20 +256,23 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
       appBar: AppBar(
         backgroundColor: const Color(0xff1565C0),
-
         elevation: 0,
-
         centerTitle: true,
 
         title: Text(
           "Timetable",
-
           style: GoogleFonts.poppins(
             color: Colors.white,
-
             fontWeight: FontWeight.w600,
           ),
         ),
+
+        actions: [
+          IconButton(
+            onPressed: _loadTimetable,
+            icon: const Icon(Icons.refresh, color: Colors.white),
+          ),
+        ],
       ),
 
       body: Padding(
@@ -94,28 +284,28 @@ class _TimetableScreenState extends State<TimetableScreen> {
           children: [
             Text(
               "Weekly Schedule",
-
               style: GoogleFonts.poppins(
                 fontSize: 22,
-
                 fontWeight: FontWeight.bold,
               ),
             ),
 
             const SizedBox(height: 15),
 
+            // =====================================================
+            // DAY SELECTOR
+            // =====================================================
             SizedBox(
               height: 45,
 
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-
                 itemCount: days.length,
 
                 itemBuilder: (context, index) {
-                  String day = days[index];
+                  final day = days[index];
 
-                  bool active = selectedDay == day;
+                  final active = selectedDay == day;
 
                   return GestureDetector(
                     onTap: () {
@@ -129,7 +319,6 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
                       padding: const EdgeInsets.symmetric(
                         horizontal: 18,
-
                         vertical: 10,
                       ),
 
@@ -156,24 +345,77 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
             const SizedBox(height: 20),
 
-            Expanded(
-              child: ListView.builder(
-                itemCount: timetable[selectedDay]!.length,
-
-                itemBuilder: (context, index) {
-                  var item = timetable[selectedDay]![index];
-
-                  return _classCard(item);
-                },
-              ),
-            ),
+            // =====================================================
+            // TIMETABLE
+            // =====================================================
+            Expanded(child: _buildTimetableContent()),
           ],
         ),
       ),
     );
   }
 
-  Widget _classCard(Map<String, String> item) {
+  // ============================================================
+  // TIMETABLE CONTENT
+  // ============================================================
+
+  Widget _buildTimetableContent() {
+    if (isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+
+          children: [
+            const Icon(Icons.error_outline, size: 50, color: Colors.red),
+
+            const SizedBox(height: 10),
+
+            Text(errorMessage!, style: GoogleFonts.poppins()),
+
+            const SizedBox(height: 15),
+
+            ElevatedButton(
+              onPressed: _loadTimetable,
+              child: const Text("Retry"),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final classes = selectedDayClasses;
+
+    if (classes.isEmpty) {
+      return Center(
+        child: Text(
+          "No classes scheduled for $selectedDay.",
+          style: GoogleFonts.poppins(color: Colors.grey),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: classes.length,
+
+      itemBuilder: (context, index) {
+        return _classCard(classes[index]);
+      },
+    );
+  }
+
+  // ============================================================
+  // CLASS CARD
+  // ============================================================
+
+  Widget _classCard(TeacherTimetableModel item) {
+    final classText = item.sectionName == null || item.sectionName!.isEmpty
+        ? item.className
+        : '${item.className} - ${item.sectionName}';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
 
@@ -184,27 +426,23 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
         borderRadius: BorderRadius.circular(22),
 
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6)],
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6)],
       ),
 
       child: Row(
         children: [
           Container(
             height: 60,
-
             width: 60,
 
             decoration: const BoxDecoration(
               color: Color(0xffE3F2FD),
-
               shape: BoxShape.circle,
             ),
 
             child: const Icon(
               Icons.schedule,
-
               color: Color(0xff1565C0),
-
               size: 30,
             ),
           ),
@@ -217,11 +455,10 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
               children: [
                 Text(
-                  item["subject"]!,
+                  item.subjectName,
 
                   style: GoogleFonts.poppins(
                     fontSize: 18,
-
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -229,10 +466,20 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 const SizedBox(height: 5),
 
                 Text(
-                  item["class"]!,
+                  classText,
 
                   style: GoogleFonts.poppins(color: Colors.grey.shade700),
                 ),
+
+                if (item.roomNumber != null && item.roomNumber!.isNotEmpty)
+                  Text(
+                    "Room: ${item.roomNumber}",
+
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -244,13 +491,18 @@ class _TimetableScreenState extends State<TimetableScreen> {
               const SizedBox(height: 5),
 
               Text(
-                item["time"]!,
+                _formatTime(item.startTime),
 
                 style: GoogleFonts.poppins(
                   fontSize: 12,
-
                   fontWeight: FontWeight.w600,
                 ),
+              ),
+
+              Text(
+                _formatTime(item.endTime),
+
+                style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
               ),
             ],
           ),

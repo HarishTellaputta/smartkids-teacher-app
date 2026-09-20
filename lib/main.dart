@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'auth/login_screen.dart';
-
+import 'package:teacher_app/auth/login_screen.dart';
 void main() {
   runApp(const SmartKidsApp());
 }
@@ -15,7 +14,9 @@ class SmartKidsApp extends StatelessWidget {
 
       title: "SmartKids",
 
-      theme: ThemeData(primarySwatch: Colors.blue),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
 
       home: const LoginScreen(),
     );
