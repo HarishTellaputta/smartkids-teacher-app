@@ -2,27 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../auth/auth_storage.dart';
-import '../models/section_model.dart';
 import '../models/student_model.dart';
-import '../services/section_service.dart';
 import '../services/student_service.dart';
 import 'attendance_screen.dart';
+import '../teacher/student_profile_screen.dart';
 
 class ClassStudentsScreen extends StatefulWidget {
   final int classId;
   final String className;
   final String subject;
-
-  // false = normal student list
-  // true  = open attendance after section selection
   final bool openAttendance;
+
+  // Assigned section only.
+  final int sectionId;
+  final String sectionName;
 
   const ClassStudentsScreen({
     super.key,
     required this.classId,
     required this.className,
     required this.subject,
-    this.openAttendance = false,
+    required this.openAttendance,
+    required this.sectionId,
+    required this.sectionName,
   });
 
   @override
@@ -30,13 +32,13 @@ class ClassStudentsScreen extends StatefulWidget {
 }
 
 class _ClassStudentsScreenState extends State<ClassStudentsScreen> {
-  List<SectionModel> sections = [];
+  static const Color primaryColor = Color(0xff1565C0);
+  static const Color backgroundColor = Color(0xffF5F8FC);
+  static const Color textColor = Color(0xff172033);
+
   List<StudentModel> students = [];
 
-  int? selectedSectionId;
-
-  bool isLoadingSections = true;
-  bool isLoadingStudents = false;
+  bool isLoadingStudents = true;
 
   String searchQuery = '';
 
@@ -45,7 +47,34 @@ class _ClassStudentsScreenState extends State<ClassStudentsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadSections();
+
+    _initializeScreen();
+  }
+
+  // ============================================================
+  // INITIALIZE
+  // ============================================================
+
+  Future<void> _initializeScreen() async {
+    debugPrint('========================================');
+    debugPrint('CLASS STUDENTS SCREEN');
+    debugPrint('CLASS ID    : ${widget.classId}');
+    debugPrint('CLASS NAME  : ${widget.className}');
+    debugPrint('SUBJECT     : ${widget.subject}');
+    debugPrint('SECTION ID  : ${widget.sectionId}');
+    debugPrint('SECTION NAME: ${widget.sectionName}');
+    debugPrint('OPEN ATTENDANCE: ${widget.openAttendance}');
+    debugPrint('========================================');
+
+    await _loadStudents();
+
+    // If this screen was opened specifically for Attendance,
+    // automatically open Attendance for the SAME assigned section.
+    if (widget.openAttendance && !_attendanceOpened && mounted) {
+      _attendanceOpened = true;
+
+      await _openAttendance();
+    }
   }
 
   // ============================================================
@@ -56,121 +85,57 @@ class _ClassStudentsScreenState extends State<ClassStudentsScreen> {
     final token = await AuthStorage.getToken();
 
     if (token == null || token.isEmpty) {
-      throw Exception(
-        'Login token not found. Please login again.',
-      );
+      throw Exception('Login token not found. Please login again.');
     }
 
     return token;
   }
 
   // ============================================================
-  // LOAD SECTIONS
-  // ============================================================
-
-  Future<void> _loadSections() async {
-    try {
-      debugPrint('========================================');
-      debugPrint('CLASS STUDENTS: START');
-      debugPrint('CLASS ID: ${widget.classId}');
-      debugPrint('CLASS NAME: ${widget.className}');
-      debugPrint('SUBJECT: ${widget.subject}');
-      debugPrint('OPEN ATTENDANCE: ${widget.openAttendance}');
-
-      setState(() {
-        isLoadingSections = true;
-      });
-
-      final token = await _getToken();
-
-      final service = SectionService(token);
-
-      final result = await service.getSectionsByClassId(
-        widget.classId,
-      );
-
-      debugPrint('Sections received: ${result.length}');
-
-      for (final section in result) {
-        debugPrint(
-          'SECTION -> ID: ${section.id}, NAME: ${section.name}',
-        );
-      }
-
-      if (!mounted) return;
-
-      setState(() {
-        sections = result;
-        isLoadingSections = false;
-      });
-
-      if (sections.isNotEmpty) {
-        await _loadStudents(sections.first.id);
-
-        // Attendance was selected from Class Workspace.
-        // Open attendance automatically for the first section.
-        if (widget.openAttendance &&
-            !_attendanceOpened &&
-            mounted) {
-          _attendanceOpened = true;
-
-          await _openAttendanceForSection(
-            sections.first,
-          );
-        }
-      }
-
-      debugPrint('CLASS STUDENTS: FINISHED');
-      debugPrint('========================================');
-    } catch (e) {
-      debugPrint(
-        'CLASS STUDENTS SECTION ERROR: $e',
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        isLoadingSections = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Failed to load sections: $e',
-          ),
-        ),
-      );
-    }
-  }
-
-  // ============================================================
   // LOAD STUDENTS
   // ============================================================
 
-  Future<void> _loadStudents(int sectionId) async {
+  Future<void> _loadStudents() async {
     try {
-      debugPrint('----------------------------------------');
-      debugPrint('LOAD STUDENTS START');
-      debugPrint('CLASS ID: ${widget.classId}');
-      debugPrint('SECTION ID: $sectionId');
+      if (mounted) {
+        setState(() {
+          isLoadingStudents = true;
+          students = [];
+          searchQuery = '';
+        });
+      }
 
-      setState(() {
-        selectedSectionId = sectionId;
-        isLoadingStudents = true;
-        students = [];
-      });
+      debugPrint('----------------------------------------');
+      debugPrint('LOAD ASSIGNED SECTION STUDENTS');
+      debugPrint('CLASS ID   : ${widget.classId}');
+      debugPrint('SECTION ID : ${widget.sectionId}');
+      debugPrint('SECTION    : ${widget.sectionName}');
+      debugPrint('----------------------------------------');
 
       final token = await _getToken();
 
       final studentService = StudentService(token);
 
-      final loadedStudents =
-          await studentService.getStudentsBySectionId(
-        sectionId,
+      // ========================================================
+      // IMPORTANT
+      // ========================================================
+      //
+      // We intentionally DO NOT call:
+      //
+      // getStudentsByClassId(widget.classId)
+      //
+      // because that could return students from every section.
+      //
+      // We use the exact assigned section ID.
+      // ========================================================
+
+      final loadedStudents = await studentService.getStudentsBySectionId(
+        widget.sectionId,
       );
 
       debugPrint(
-        'Students received: ${loadedStudents.length}',
+        'Students received for Section '
+        '${widget.sectionName}: ${loadedStudents.length}',
       );
 
       for (final student in loadedStudents) {
@@ -178,7 +143,8 @@ class _ClassStudentsScreenState extends State<ClassStudentsScreen> {
           'STUDENT -> '
           'ID: ${student.id}, '
           'NAME: ${student.name}, '
-          'ROLL: ${student.rollNumber}',
+          'ROLL: ${student.rollNumber}, '
+          'SECTION ID: ${student.sectionId}',
         );
       }
 
@@ -190,15 +156,14 @@ class _ClassStudentsScreenState extends State<ClassStudentsScreen> {
       });
 
       debugPrint(
-        'TOTAL STUDENTS LOADED: ${loadedStudents.length}',
+        'TOTAL STUDENTS IN SECTION '
+        '${widget.sectionName}: ${loadedStudents.length}',
       );
 
       debugPrint('LOAD STUDENTS FINISHED');
       debugPrint('----------------------------------------');
     } catch (e) {
-      debugPrint(
-        'LOAD STUDENTS ERROR: $e',
-      );
+      debugPrint('LOAD ASSIGNED SECTION STUDENTS ERROR: $e');
 
       if (!mounted) return;
 
@@ -207,13 +172,7 @@ class _ClassStudentsScreenState extends State<ClassStudentsScreen> {
         students = [];
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Failed to load students: $e',
-          ),
-        ),
-      );
+      _showMessage('Failed to load students.', isError: true);
     }
   }
 
@@ -222,46 +181,12 @@ class _ClassStudentsScreenState extends State<ClassStudentsScreen> {
   // ============================================================
 
   Future<void> _openAttendance() async {
-    if (selectedSectionId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please select a section first.',
-          ),
-        ),
-      );
-
-      return;
-    }
-
-    final selectedSection = sections.firstWhere(
-      (section) => section.id == selectedSectionId,
-    );
-
-    await _openAttendanceForSection(
-      selectedSection,
-    );
-  }
-
-  // ============================================================
-  // OPEN ATTENDANCE FOR SECTION
-  // ============================================================
-
-  Future<void> _openAttendanceForSection(
-    SectionModel section,
-  ) async {
     final teacherId = await AuthStorage.getTeacherId();
 
     if (teacherId == null) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Teacher ID not found. Please login again.',
-          ),
-        ),
-      );
+      _showMessage('Teacher ID not found. Please login again.', isError: true);
 
       return;
     }
@@ -274,9 +199,15 @@ class _ClassStudentsScreenState extends State<ClassStudentsScreen> {
         builder: (_) => AttendanceScreen(
           classId: widget.classId,
           teacherId: teacherId,
-          className:
-              '${widget.className} - Section ${section.name}',
-          sectionId: section.id,
+
+          // Class name only.
+          // AttendanceScreen itself will show:
+          // Class 6 • Section A
+          className: widget.className,
+
+          // Exact assigned section.
+          sectionId: widget.sectionId,
+          sectionName: widget.sectionName,
         ),
       ),
     );
@@ -295,10 +226,14 @@ class _ClassStudentsScreenState extends State<ClassStudentsScreen> {
 
     return students.where((student) {
       final name = student.name.toLowerCase();
+
       final roll = student.rollNumber.toLowerCase();
 
+      final admissionNo = student.admissionNo.toLowerCase();
+
       return name.contains(query) ||
-          roll.contains(query);
+          roll.contains(query) ||
+          admissionNo.contains(query);
     }).toList();
   }
 
@@ -309,43 +244,220 @@ class _ClassStudentsScreenState extends State<ClassStudentsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xffF5F8FC),
-      appBar: AppBar(
-        backgroundColor: const Color(0xff1565C0),
-        elevation: 0,
-        iconTheme: const IconThemeData(
-          color: Colors.white,
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.className,
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            Text(
-              widget.subject,
-              style: GoogleFonts.poppins(
-                color: Colors.white70,
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ),
-      ),
+      backgroundColor: backgroundColor,
+
+      appBar: _buildAppBar(),
+
       body: Column(
         children: [
-          _buildSectionSelector(),
+          _buildTopSummary(),
 
-          if (!widget.openAttendance)
-            _buildStudentHeader(),
+          // NO SECTION SELECTOR HERE.
+          //
+          // Teacher is already assigned to:
+          // Section ${widget.sectionName}
+          if (!widget.openAttendance) _buildStudentHeader(),
 
+          Expanded(child: _buildStudents()),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // APP BAR
+  // ============================================================
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.white,
+      elevation: 0,
+      centerTitle: false,
+      titleSpacing: 4,
+
+      leading: IconButton(
+        icon: const Icon(
+          Icons.arrow_back_ios_new_rounded,
+          size: 19,
+          color: textColor,
+        ),
+        onPressed: () => Navigator.pop(context),
+      ),
+
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.className,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.poppins(
+              color: textColor,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+
+          const SizedBox(height: 1),
+
+          Text(
+            '${widget.subject} • Section ${widget.sectionName}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.poppins(
+              color: Colors.grey.shade600,
+              fontSize: 9,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+
+      actions: [
+        if (widget.openAttendance)
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+
+              decoration: BoxDecoration(
+                color: const Color(0xffEAF3FF),
+                borderRadius: BorderRadius.circular(11),
+              ),
+
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.fact_check_outlined,
+                    color: primaryColor,
+                    size: 15,
+                  ),
+
+                  const SizedBox(width: 5),
+
+                  Text(
+                    'Attendance',
+                    style: GoogleFonts.poppins(
+                      color: primaryColor,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // TOP SUMMARY
+  // ============================================================
+
+  Widget _buildTopSummary() {
+    return Container(
+      width: double.infinity,
+
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+
+      padding: const EdgeInsets.all(16),
+
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xff0D47A1), Color(0xff1565C0), Color(0xff42A5F5)],
+        ),
+
+        borderRadius: BorderRadius.circular(22),
+
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withOpacity(0.16),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+
+      child: Row(
+        children: [
+          // ======================================================
+          // ICON
+          // ======================================================
+
+          Container(
+            width: 49,
+            height: 49,
+
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(15),
+            ),
+
+            child: Icon(
+              widget.openAttendance
+                  ? Icons.fact_check_rounded
+                  : Icons.groups_rounded,
+              color: Colors.white,
+              size: 25,
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          // ======================================================
+          // TEXT
+          // ======================================================
           Expanded(
-            child: _buildStudents(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+
+              children: [
+                Text(
+                  widget.openAttendance ? 'Attendance' : 'Class Students',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+
+                const SizedBox(height: 2),
+
+                Text(
+                  'Section ${widget.sectionName}',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white.withOpacity(0.82),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+
+                const SizedBox(height: 2),
+
+                Text(
+                  widget.openAttendance
+                      ? 'Attendance for assigned section'
+                      : 'Students in assigned section',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white.withOpacity(0.68),
+                    fontSize: 8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ======================================================
+          // STUDENT COUNT
+          // ======================================================
+          _summaryBadge(
+            '${students.length}',
+            students.length == 1 ? 'Student' : 'Students',
           ),
         ],
       ),
@@ -353,110 +465,34 @@ class _ClassStudentsScreenState extends State<ClassStudentsScreen> {
   }
 
   // ============================================================
-  // SECTION SELECTOR
+  // SUMMARY BADGE
   // ============================================================
 
-  Widget _buildSectionSelector() {
-    if (isLoadingSections) {
-      return Container(
-        height: 70,
-        color: Colors.white,
-        child: const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-
-    if (sections.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        color: Colors.white,
-        child: Text(
-          'No sections found for this class.',
-          style: GoogleFonts.poppins(
-            color: Colors.grey[700],
-          ),
-        ),
-      );
-    }
-
+  Widget _summaryBadge(String value, String label) {
     return Container(
-      width: double.infinity,
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(
-        16,
-        12,
-        16,
-        12,
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.13),
+        borderRadius: BorderRadius.circular(12),
       ),
+
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Sections',
+            value,
             style: GoogleFonts.poppins(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade700,
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
             ),
           ),
 
-          const SizedBox(height: 8),
-
-          SizedBox(
-            height: 42,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: sections.length,
-              itemBuilder: (context, index) {
-                final section = sections[index];
-
-                final isSelected =
-                    selectedSectionId == section.id;
-
-                return Padding(
-                  padding: const EdgeInsets.only(
-                    right: 10,
-                  ),
-                  child: ChoiceChip(
-                    label: Text(
-                      'Section ${section.name}',
-                    ),
-                    selected: isSelected,
-                    onSelected: (_) async {
-                      await _loadStudents(
-                        section.id,
-                      );
-
-                      // In attendance mode, selecting
-                      // another section opens its attendance.
-                      if (widget.openAttendance &&
-                          mounted) {
-                        await _openAttendanceForSection(
-                          section,
-                        );
-                      }
-                    },
-                    selectedColor:
-                        const Color(0xff1565C0),
-                    labelStyle: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected
-                          ? Colors.white
-                          : Colors.grey.shade800,
-                    ),
-                    backgroundColor:
-                        const Color(0xffF1F4F8),
-                    side: BorderSide(
-                      color: isSelected
-                          ? const Color(0xff1565C0)
-                          : Colors.grey.shade300,
-                    ),
-                  ),
-                );
-              },
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              color: Colors.white.withOpacity(0.72),
+              fontSize: 7,
             ),
           ),
         ],
@@ -469,83 +505,142 @@ class _ClassStudentsScreenState extends State<ClassStudentsScreen> {
   // ============================================================
 
   Widget _buildStudentHeader() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(
-        16,
-        10,
-        16,
-        10,
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 7),
+
       child: Column(
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  'Students',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+              Container(
+                width: 38,
+                height: 38,
+
+                decoration: BoxDecoration(
+                  color: const Color(0xffEAF3FF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+
+                child: const Icon(
+                  Icons.people_alt_outlined,
+                  color: primaryColor,
+                  size: 19,
                 ),
               ),
 
+              const SizedBox(width: 10),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+
+                  children: [
+                    Text(
+                      'Students',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: textColor,
+                      ),
+                    ),
+
+                    Text(
+                      'Section ${widget.sectionName} students',
+                      style: GoogleFonts.poppins(
+                        fontSize: 8,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // ==================================================
+              // STUDENT COUNT
+              // ==================================================
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
-                  vertical: 5,
+                  vertical: 6,
                 ),
+
                 decoration: BoxDecoration(
-                  color: const Color(0xffE3F2FD),
-                  borderRadius:
-                      BorderRadius.circular(10),
+                  color: const Color(0xffEAF3FF),
+                  borderRadius: BorderRadius.circular(10),
                 ),
+
                 child: Text(
-                  '${students.length} Students',
+                  '${students.length}',
                   style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xff1565C0),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: primaryColor,
                   ),
                 ),
               ),
             ],
           ),
 
-          const SizedBox(height: 10),
+          const SizedBox(height: 11),
 
+          // ======================================================
           // SEARCH
+          // ======================================================
           TextField(
             onChanged: (value) {
               setState(() {
                 searchQuery = value;
               });
             },
+
             style: GoogleFonts.poppins(
-              fontSize: 13,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
             ),
+
             decoration: InputDecoration(
-              hintText: 'Search by name or roll number',
+              hintText: 'Search student name or roll number',
+
               hintStyle: GoogleFonts.poppins(
-                fontSize: 12,
+                fontSize: 10,
                 color: Colors.grey.shade500,
               ),
+
               prefixIcon: const Icon(
-                Icons.search,
-                size: 20,
-                color: Colors.grey,
+                Icons.search_rounded,
+                size: 19,
+                color: primaryColor,
               ),
+
+              suffixIcon: searchQuery.isNotEmpty
+                  ? IconButton(
+                      onPressed: () {
+                        setState(() {
+                          searchQuery = '';
+                        });
+                      },
+                      icon: const Icon(Icons.close_rounded, size: 17),
+                    )
+                  : null,
+
               filled: true,
-              fillColor: const Color(0xffF5F8FC),
-              contentPadding:
-                  const EdgeInsets.symmetric(
-                vertical: 10,
-              ),
+              fillColor: Colors.white,
+
+              contentPadding: const EdgeInsets.symmetric(vertical: 11),
+
               border: OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(12),
-                borderSide: BorderSide.none,
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: Color(0xffE5EAF0)),
+              ),
+
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: Color(0xffE5EAF0)),
+              ),
+
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: primaryColor, width: 1.2),
               ),
             ),
           ),
@@ -555,108 +650,36 @@ class _ClassStudentsScreenState extends State<ClassStudentsScreen> {
   }
 
   // ============================================================
-  // STUDENTS LIST
+  // STUDENTS
   // ============================================================
 
   Widget _buildStudents() {
     if (isLoadingStudents) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
-
-    if (selectedSectionId == null) {
-      return Center(
-        child: Text(
-          'Select a section',
-          style: GoogleFonts.poppins(
-            color: Colors.grey[600],
-          ),
-        ),
-      );
+      return _buildStudentsLoading();
     }
 
     final visibleStudents = filteredStudents;
 
     if (visibleStudents.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: () {
-          return _loadStudents(
-            selectedSectionId!,
-          );
-        },
-        child: ListView(
-          physics:
-              const AlwaysScrollableScrollPhysics(),
-          children: [
-            SizedBox(
-              height:
-                  MediaQuery.of(context).size.height *
-                      0.45,
-              child: Column(
-                mainAxisAlignment:
-                    MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.people_outline,
-                    size: 55,
-                    color: Colors.grey,
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  Text(
-                    searchQuery.isEmpty
-                        ? 'No students found'
-                        : 'No matching students',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-
-                  const SizedBox(height: 5),
-
-                  Text(
-                    searchQuery.isEmpty
-                        ? 'No students are assigned to this section.'
-                        : 'Try another name or roll number.',
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildEmptyStudents();
     }
 
     return RefreshIndicator(
-      onRefresh: () {
-        return _loadStudents(
-          selectedSectionId!,
-        );
-      },
+      color: primaryColor,
+
+      onRefresh: _loadStudents,
+
       child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(
-          16,
-          12,
-          16,
-          20,
-        ),
-        physics:
-            const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 25),
+
+        physics: const AlwaysScrollableScrollPhysics(),
+
         itemCount: visibleStudents.length,
+
         itemBuilder: (context, index) {
           final student = visibleStudents[index];
 
-          return _buildStudentCard(
-            student,
-            index,
-          );
+          return _buildStudentCard(student, index);
         },
       ),
     );
@@ -666,80 +689,341 @@ class _ClassStudentsScreenState extends State<ClassStudentsScreen> {
   // STUDENT CARD
   // ============================================================
 
-  Widget _buildStudentCard(
-    StudentModel student,
-    int index,
-  ) {
+  Widget _buildStudentCard(StudentModel student, int index) {
     return Container(
-      margin: const EdgeInsets.only(
-        bottom: 8,
-      ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 11,
-      ),
-      decoration: BoxDecoration(
+      margin: const EdgeInsets.only(bottom: 9),
+      child: Material(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(13),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 4,
-            offset: Offset(0, 1),
+        borderRadius: BorderRadius.circular(17),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(17),
+
+          // ======================================================
+          // OPEN STUDENT PROFILE
+          // ======================================================
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => StudentProfileScreen(studentId: student.id),
+              ),
+            );
+          },
+
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+
+            decoration: BoxDecoration(
+              color: Colors.white,
+
+              borderRadius: BorderRadius.circular(17),
+
+              border: Border.all(color: const Color(0xffE9EEF4)),
+
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.025),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+
+            child: Row(
+              children: [
+                // ==================================================
+                // SERIAL
+                // ==================================================
+
+                Container(
+                  width: 26,
+                  height: 26,
+
+                  decoration: BoxDecoration(
+                    color: const Color(0xffF1F5F9),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+
+                  alignment: Alignment.center,
+
+                  child: Text(
+                    '${index + 1}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 9),
+
+                // ==================================================
+                // ROLL NUMBER
+                // ==================================================
+                Container(
+                  width: 44,
+                  height: 44,
+
+                  alignment: Alignment.center,
+
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xffEAF3FF), Color(0xffDCEEFF)],
+                    ),
+                    borderRadius: BorderRadius.all(Radius.circular(13)),
+                  ),
+
+                  child: Text(
+                    student.rollNumber.isNotEmpty ? student.rollNumber : '-',
+
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: primaryColor,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                // ==================================================
+                // STUDENT INFO
+                // ==================================================
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        student.name,
+
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: textColor,
+                        ),
+                      ),
+
+                      const SizedBox(height: 3),
+
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.confirmation_number_outlined,
+                            size: 11,
+                            color: Colors.grey.shade500,
+                          ),
+
+                          const SizedBox(width: 4),
+
+                          Expanded(
+                            child: Text(
+                              student.rollNumber.isNotEmpty
+                                  ? 'Roll No: ${student.rollNumber}'
+                                  : 'Roll number unavailable',
+
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+
+                              style: GoogleFonts.poppins(
+                                fontSize: 8,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ==================================================
+                // ARROW
+                // ==================================================
+                Container(
+                  width: 31,
+                  height: 31,
+
+                  decoration: BoxDecoration(
+                    color: const Color(0xffF5F8FC),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.grey.shade400,
+                    size: 19,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  // ============================================================
+  // LOADING
+  // ============================================================
+
+  Widget _buildStudentsLoading() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+
+        children: [
+          Container(
+            width: 65,
+            height: 65,
+
+            decoration: BoxDecoration(
+              color: const Color(0xffEAF3FF),
+              borderRadius: BorderRadius.circular(22),
+            ),
+
+            child: const Padding(
+              padding: EdgeInsets.all(19),
+
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: primaryColor,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 15),
+
+          Text(
+            'Loading Section ${widget.sectionName} students...',
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
-      child: Row(
+    );
+  }
+
+  // ============================================================
+  // EMPTY STUDENTS
+  // ============================================================
+
+  Widget _buildEmptyStudents() {
+    return RefreshIndicator(
+      color: primaryColor,
+
+      onRefresh: _loadStudents,
+
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+
         children: [
-          // ROLL NUMBER
-          Container(
-            width: 42,
-            height: 42,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0xffE3F2FD),
-              borderRadius:
-                  BorderRadius.circular(11),
-            ),
-            child: Text(
-              student.rollNumber.isNotEmpty
-                  ? student.rollNumber
-                  : '-',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xff1565C0),
-              ),
-            ),
-          ),
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.42,
 
-          const SizedBox(width: 12),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
 
-          // NAME
-          Expanded(
-            child: Text(
-              student.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade800,
-              ),
-            ),
-          ),
+              children: [
+                Container(
+                  width: 76,
+                  height: 76,
 
-          // SERIAL NUMBER
-          Text(
-            '#${index + 1}',
-            style: GoogleFonts.poppins(
-              fontSize: 10,
-              color: Colors.grey.shade400,
+                  decoration: BoxDecoration(
+                    color: const Color(0xffEEF3F8),
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+
+                  child: Icon(
+                    searchQuery.isEmpty
+                        ? Icons.people_outline_rounded
+                        : Icons.search_off_rounded,
+                    size: 36,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                Text(
+                  searchQuery.isEmpty
+                      ? 'No Students Found'
+                      : 'No Matching Students',
+
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                  ),
+                ),
+
+                const SizedBox(height: 5),
+
+                Text(
+                  searchQuery.isEmpty
+                      ? 'No students are assigned to Section ${widget.sectionName}.'
+                      : 'Try another name or roll number.',
+
+                  textAlign: TextAlign.center,
+
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // SNACKBAR
+  // ============================================================
+
+  void _showMessage(String message, {bool isError = false}) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+
+        backgroundColor: isError ? const Color(0xffD32F2F) : textColor,
+
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+
+        content: Row(
+          children: [
+            Icon(
+              isError
+                  ? Icons.error_outline_rounded
+                  : Icons.check_circle_outline_rounded,
+
+              color: Colors.white,
+
+              size: 19,
+            ),
+
+            const SizedBox(width: 9),
+
+            Expanded(
+              child: Text(
+                message,
+                style: GoogleFonts.poppins(fontSize: 10, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

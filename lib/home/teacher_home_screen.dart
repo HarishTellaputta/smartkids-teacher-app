@@ -7,10 +7,14 @@ import 'package:teacher_app/services/teacher_service.dart';
 
 import 'package:teacher_app/teacher/timetable_screen.dart';
 import 'package:teacher_app/teacher/my_classes_screen.dart';
-import 'package:teacher_app/teacher/teacher_profile_screen.dart';
-import 'package:teacher_app/teacher/leave_request_screen.dart';
 import 'package:teacher_app/teacher/class_workspace_screen.dart';
 import 'package:teacher_app/teacher/exams_screen.dart';
+import 'package:teacher_app/teacher/teacher_profile_screen.dart';
+import 'package:teacher_app/models/student_birthday_status_model.dart';
+import 'package:teacher_app/services/student_birthday_status_service.dart';
+import 'package:teacher_app/teacher/teacher_notices_screen.dart';
+import 'package:teacher_app/teacher/teacher_performance_screen.dart';
+import 'package:teacher_app/teacher/teacher_leave_request_screen.dart';
 
 class TeacherHomeScreen extends StatefulWidget {
   const TeacherHomeScreen({super.key});
@@ -29,12 +33,15 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
 
   List<TeacherTimetableModel> todayClasses = [];
   bool isLoadingTodayClasses = true;
+  List<StudentBirthdayStatusModel> todayBirthdays = [];
+  bool isLoadingBirthdays = true;
 
   @override
   void initState() {
     super.initState();
     _loadTeacherName();
     _loadTodayClasses();
+    _loadTodayBirthdays();
   }
 
   // ============================================================
@@ -45,9 +52,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
-      body: SafeArea(
-        child: _buildBody(),
-      ),
+      body: SafeArea(child: _buildBody()),
       bottomNavigationBar: _buildBottomNavigation(),
     );
   }
@@ -58,11 +63,11 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
 
   Widget _buildBody() {
     if (_selectedIndex == 1) {
-      return const MyClassesScreen();
+      return const ExamsScreen();
     }
 
     if (_selectedIndex == 2) {
-      return const TeacherProfileScreen();
+      return const LeaveRequestScreen();
     }
 
     return _buildHome();
@@ -71,6 +76,49 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   // ============================================================
   // HOME
   // ============================================================
+
+  Future<void> _loadTodayBirthdays() async {
+    try {
+      if (mounted) {
+        setState(() {
+          isLoadingBirthdays = true;
+        });
+      }
+
+      final token = await AuthStorage.getToken();
+
+      if (token == null || token.isEmpty) {
+        if (!mounted) return;
+
+        setState(() {
+          todayBirthdays = [];
+          isLoadingBirthdays = false;
+        });
+
+        return;
+      }
+
+      final service = StudentBirthdayStatusService(token);
+
+      final birthdays = await service.getTodayBirthdays();
+
+      if (!mounted) return;
+
+      setState(() {
+        todayBirthdays = birthdays;
+        isLoadingBirthdays = false;
+      });
+    } catch (e) {
+      debugPrint('TODAY BIRTHDAYS ERROR: $e');
+
+      if (!mounted) return;
+
+      setState(() {
+        todayBirthdays = [];
+        isLoadingBirthdays = false;
+      });
+    }
+  }
 
   Widget _buildHome() {
     return RefreshIndicator(
@@ -89,6 +137,10 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
             const SizedBox(height: 24),
 
             _buildTodaySummary(),
+
+            const SizedBox(height: 24),
+
+            _buildBirthdayStatus(),
 
             const SizedBox(height: 28),
 
@@ -126,23 +178,25 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   Widget _buildHeader() {
     return Row(
       children: [
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _selectedIndex = 2;
-            });
-          },
-          child: Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: const Color(0xffE3F2FD),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(
-              Icons.person,
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: const Color(0xffE7ECF3)),
+          ),
+          child: IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TeacherProfileScreen()),
+              );
+            },
+            icon: const Icon(
+              Icons.person_rounded,
               color: primaryColor,
-              size: 28,
+              size: 24,
             ),
           ),
         ),
@@ -161,7 +215,9 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
+
               const SizedBox(height: 2),
+
               Text(
                 teacherName,
                 maxLines: 1,
@@ -176,15 +232,17 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
           ),
         ),
 
+        // PROFILE
+        const SizedBox(width: 10),
+
+        // NOTIFICATIONS
         Container(
           width: 46,
           height: 46,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(15),
-            border: Border.all(
-              color: const Color(0xffE7ECF3),
-            ),
+            border: Border.all(color: const Color(0xffE7ECF3)),
           ),
           child: IconButton(
             onPressed: () {
@@ -200,7 +258,6 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
       ],
     );
   }
-
   // ============================================================
   // TODAY SUMMARY
   // ============================================================
@@ -252,13 +309,15 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
+
                 const SizedBox(height: 3),
+
                 Text(
                   isLoadingTodayClasses
                       ? 'Loading your classes...'
                       : count == 0
-                          ? 'No classes scheduled today'
-                          : '$count ${count == 1 ? 'class' : 'classes'} scheduled today',
+                      ? 'No classes scheduled today'
+                      : '$count ${count == 1 ? 'class' : 'classes'} scheduled today',
                   style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontSize: 16,
@@ -283,14 +342,138 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
     );
   }
 
+  Widget _buildBirthdayStatus() {
+    if (isLoadingBirthdays) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xffE8EDF4)),
+        ),
+        child: const Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: primaryColor,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (todayBirthdays.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(
+          title: 'Birthday Status 🎂',
+          subtitle: 'Students celebrating today',
+        ),
+
+        const SizedBox(height: 14),
+
+        ...todayBirthdays.map((birthday) => _birthdayCard(birthday)),
+      ],
+    );
+  }
+
+  Widget _birthdayCard(StudentBirthdayStatusModel birthday) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xffE8EDF4)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: const Color(0xfffff3e0),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.cake_rounded,
+              color: Color(0xffF57C00),
+              size: 27,
+            ),
+          ),
+
+          const SizedBox(width: 14),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  birthday.studentName ?? 'Student',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xff172033),
+                  ),
+                ),
+
+                const SizedBox(height: 3),
+
+                Text(
+                  [
+                    if (birthday.className != null) birthday.className!,
+                    if (birthday.section != null) 'Section ${birthday.section}',
+                  ].join(' • '),
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: const Color(0xfffff3e0),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '🎉 Birthday',
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xffEF6C00),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
   // ============================================================
   // SECTION TITLE
   // ============================================================
 
-  Widget _buildSectionTitle({
-    required String title,
-    required String subtitle,
-  }) {
+  Widget _buildSectionTitle({required String title, required String subtitle}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -302,13 +485,12 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
             color: const Color(0xff172033),
           ),
         ),
+
         const SizedBox(height: 2),
+
         Text(
           subtitle,
-          style: GoogleFonts.poppins(
-            fontSize: 12,
-            color: Colors.grey.shade600,
-          ),
+          style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
         ),
       ],
     );
@@ -327,6 +509,10 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       children: [
+        // ============================================================
+        // TIMETABLE
+        // ============================================================
+
         _quickActionCard(
           icon: Icons.calendar_month_rounded,
           title: 'Timetable',
@@ -334,47 +520,57 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => const TimetableScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => const TimetableScreen()),
             );
           },
         ),
 
-        _quickActionCard(
-          icon: Icons.menu_book_rounded,
-          title: 'Exams',
-          subtitle: 'Exams & marks',
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const ExamsScreen(),
-              ),
-            );
-          },
-        ),
-
+        // ============================================================
+        // MY CLASSES
+        // ============================================================
         _quickActionCard(
           icon: Icons.class_rounded,
           title: 'My Classes',
           subtitle: 'Students & classes',
           onTap: () {
             setState(() {
-              _selectedIndex = 1;
+              _selectedIndex = 0;
             });
+
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MyClassesScreen()),
+            );
           },
         ),
 
+        // ============================================================
+        // NOTICES
+        // ============================================================
         _quickActionCard(
-          icon: Icons.event_available_rounded,
-          title: 'Leave Request',
-          subtitle: 'Apply for leave',
+          icon: Icons.campaign_rounded,
+          title: 'Notices',
+          subtitle: 'School announcements',
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TeacherNoticesScreen()),
+            );
+          },
+        ),
+
+        // ============================================================
+        // PERFORMANCE
+        // ============================================================
+        _quickActionCard(
+          icon: Icons.insights_rounded,
+          title: 'Performance',
+          subtitle: 'View your performance',
           onTap: () {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => const LeaveRequestScreen(),
+                builder: (_) => const TeacherPerformanceScreen(),
               ),
             );
           },
@@ -399,9 +595,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
           padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: const Color(0xffE8EDF4),
-            ),
+            border: Border.all(color: const Color(0xffE8EDF4)),
           ),
           child: Row(
             children: [
@@ -412,11 +606,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                   color: const Color(0xffE3F2FD),
                   borderRadius: BorderRadius.circular(13),
                 ),
-                child: Icon(
-                  icon,
-                  color: primaryColor,
-                  size: 23,
-                ),
+                child: Icon(icon, color: primaryColor, size: 23),
               ),
 
               const SizedBox(width: 11),
@@ -436,7 +626,9 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                         color: const Color(0xff172033),
                       ),
                     ),
+
                     const SizedBox(height: 2),
+
                     Text(
                       subtitle,
                       maxLines: 1,
@@ -473,10 +665,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
       children: todayClasses.map((item) {
         final className = _buildClassName(item);
 
-        return _todayClassCard(
-          item: item,
-          className: className,
-        );
+        return _todayClassCard(item: item, className: className);
       }).toList(),
     );
   }
@@ -490,27 +679,64 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(19),
-        border: Border.all(
-          color: const Color(0xffE8EDF4),
-        ),
+        border: Border.all(color: const Color(0xffE8EDF4)),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(19),
           onTap: () {
+            // ========================================================
+            // SECTION VALIDATION
+            // ========================================================
+
+            if (item.sectionId == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Section is not assigned for this timetable.'),
+                ),
+              );
+              return;
+            }
+
+            // ========================================================
+            // SUBJECT VALIDATION
+            // ========================================================
+
+            if (item.subjectId == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Subject is not assigned for this timetable.'),
+                ),
+              );
+              return;
+            }
+
+            // ========================================================
+            // OPEN CLASS WORKSPACE
+            // ========================================================
+
             Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (_) => ClassWorkspaceScreen(
                   classId: item.classId,
                   className: className,
+
+                  // SUBJECT ID
+                  subjectId: item.subjectId!,
+
+                  // SUBJECT
                   subject: item.subjectName,
-                  students: '-',
+
+                  // ASSIGNED SECTION ONLY
+                  sectionId: item.sectionId!,
+                  sectionName: item.sectionName ?? '',
                 ),
               ),
             );
           },
+
           child: Padding(
             padding: const EdgeInsets.all(15),
             child: Row(
@@ -533,7 +759,9 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
+
                       const SizedBox(height: 2),
+
                       const Icon(
                         Icons.access_time_rounded,
                         color: primaryColor,
@@ -569,10 +797,12 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                             size: 15,
                             color: Colors.grey,
                           ),
+
                           const SizedBox(width: 5),
+
                           Expanded(
                             child: Text(
-                              className,
+                              '$className • Section ${item.sectionName ?? '-'}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.poppins(
@@ -598,9 +828,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
         ),
       ),
     );
-  }
-
-  // ============================================================
+  } // ============================================================
   // LOADING CARD
   // ============================================================
 
@@ -611,9 +839,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(19),
-        border: Border.all(
-          color: const Color(0xffE8EDF4),
-        ),
+        border: Border.all(color: const Color(0xffE8EDF4)),
       ),
       child: const Center(
         child: SizedBox(
@@ -635,16 +861,11 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   Widget _buildEmptyClassesCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: 20,
-        vertical: 28,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(19),
-        border: Border.all(
-          color: const Color(0xffE8EDF4),
-        ),
+        border: Border.all(color: const Color(0xffE8EDF4)),
       ),
       child: Column(
         children: [
@@ -707,32 +928,30 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
       destinations: [
         NavigationDestination(
           icon: const Icon(Icons.home_outlined),
-          selectedIcon: const Icon(
-            Icons.home_rounded,
-            color: primaryColor,
-          ),
+          selectedIcon: const Icon(Icons.home_rounded, color: primaryColor),
           label: 'Home',
         ),
+
         NavigationDestination(
-          icon: const Icon(Icons.class_outlined),
+          icon: const Icon(Icons.menu_book_outlined),
           selectedIcon: const Icon(
-            Icons.class_rounded,
+            Icons.menu_book_rounded,
             color: primaryColor,
           ),
-          label: 'My Classes',
+          label: 'Exams',
         ),
+
         NavigationDestination(
-          icon: const Icon(Icons.person_outline_rounded),
+          icon: const Icon(Icons.event_available_outlined),
           selectedIcon: const Icon(
-            Icons.person_rounded,
+            Icons.event_available_rounded,
             color: primaryColor,
           ),
-          label: 'Profile',
+          label: 'Leave Request',
         ),
       ],
     );
   }
-
   // ============================================================
   // LOAD TEACHER NAME
   // ============================================================
@@ -768,9 +987,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
       final token = await AuthStorage.getToken();
       final teacherId = await AuthStorage.getTeacherId();
 
-      if (token == null ||
-          token.isEmpty ||
-          teacherId == null) {
+      if (token == null || token.isEmpty || teacherId == null) {
         if (!mounted) return;
 
         setState(() {
@@ -783,12 +1000,9 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
 
       final teacherService = TeacherService(token);
 
-      final timetable =
-          await teacherService.getTodayTimetable(teacherId);
+      final timetable = await teacherService.getTodayTimetable(teacherId);
 
-      timetable.sort(
-        (a, b) => a.startTime.compareTo(b.startTime),
-      );
+      timetable.sort((a, b) => a.startTime.compareTo(b.startTime));
 
       if (!mounted) return;
 
@@ -813,8 +1027,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   // ============================================================
 
   String _buildClassName(TeacherTimetableModel item) {
-    if (item.sectionName == null ||
-        item.sectionName!.trim().isEmpty) {
+    if (item.sectionName == null || item.sectionName!.trim().isEmpty) {
       return item.className;
     }
 
