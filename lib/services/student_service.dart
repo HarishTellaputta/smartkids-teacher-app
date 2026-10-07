@@ -9,7 +9,7 @@ class StudentService {
   StudentService(String token)
     : _dio = Dio(
         BaseOptions(
-          baseUrl: 'http://10.51.231.80:8080',
+          baseUrl: 'http://10.24.241.80:8080',
           connectTimeout: const Duration(seconds: 15),
           receiveTimeout: const Duration(seconds: 15),
           headers: {
@@ -29,7 +29,7 @@ class StudentService {
     debugPrint('Student ID: $studentId');
 
     try {
-      final response = await _dio.get('/students/$studentId');
+     final response = await _dio.get('/api/v1/students/$studentId');
 
       debugPrint('Student API Status: ${response.statusCode}');
       debugPrint('Student API Response: ${response.data}');

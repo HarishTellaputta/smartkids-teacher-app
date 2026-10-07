@@ -5,16 +5,16 @@ import 'package:http/http.dart' as http;
 import '../models/homework_model.dart';
 
 class HomeworkService {
-  static const String baseUrl = 'http://10.51.231.80:8080';
+  static const String baseUrl = 'http://10.24.241.80:8080';
 
   final String token;
 
   HomeworkService(this.token);
 
   Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      };
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer $token',
+  };
 
   /// Get all homework for a class + section.
   Future<List<HomeworkModel>> getByClassAndSection(
@@ -22,9 +22,7 @@ class HomeworkService {
     int sectionId,
   ) async {
     final response = await http.get(
-      Uri.parse(
-        '$baseUrl/api/v1/homeworks/class/$classId/section/$sectionId',
-      ),
+      Uri.parse('$baseUrl/api/v1/homeworks/class/$classId/section/$sectionId'),
       headers: _headers,
     );
 
@@ -33,9 +31,7 @@ class HomeworkService {
 
       return data
           .map(
-            (json) => HomeworkModel.fromJson(
-              Map<String, dynamic>.from(json),
-            ),
+            (json) => HomeworkModel.fromJson(Map<String, dynamic>.from(json)),
           )
           .toList();
     }
@@ -60,9 +56,7 @@ class HomeworkService {
     int sectionId,
   ) async {
     final response = await http.get(
-      Uri.parse(
-        '$baseUrl/api/v1/homeworks/teacher/$teacherId',
-      ),
+      Uri.parse('$baseUrl/api/v1/homeworks/teacher/$teacherId'),
       headers: _headers,
     );
 
@@ -76,17 +70,12 @@ class HomeworkService {
     final List<dynamic> data = jsonDecode(response.body);
 
     final homeworkList = data
-        .map(
-          (json) => HomeworkModel.fromJson(
-            Map<String, dynamic>.from(json),
-          ),
-        )
+        .map((json) => HomeworkModel.fromJson(Map<String, dynamic>.from(json)))
         .toList();
 
     // Filter teacher's homework for selected class + section.
     return homeworkList.where((homework) {
-      return homework.classId == classId &&
-          homework.sectionId == sectionId;
+      return homework.classId == classId && homework.sectionId == sectionId;
     }).toList();
   }
 
@@ -115,17 +104,29 @@ class HomeworkService {
       'priority': priority ?? 'MEDIUM',
     };
 
+    print('========== CREATE HOMEWORK ==========');
+    print('URL: $baseUrl/api/v1/homeworks');
+    print('BODY: ${jsonEncode(body)}');
+
     final response = await http.post(
       Uri.parse('$baseUrl/api/v1/homeworks'),
       headers: _headers,
       body: jsonEncode(body),
     );
 
-    if (response.statusCode == 201) {
+    print('STATUS: ${response.statusCode}');
+    print('RESPONSE: ${response.body}');
+    print('=====================================');
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      if (response.body.isEmpty) {
+        throw Exception(
+          'Homework created, but backend returned empty response.',
+        );
+      }
+
       return HomeworkModel.fromJson(
-        Map<String, dynamic>.from(
-          jsonDecode(response.body),
-        ),
+        Map<String, dynamic>.from(jsonDecode(response.body)),
       );
     }
 
@@ -169,9 +170,7 @@ class HomeworkService {
 
     if (response.statusCode == 200) {
       return HomeworkModel.fromJson(
-        Map<String, dynamic>.from(
-          jsonDecode(response.body),
-        ),
+        Map<String, dynamic>.from(jsonDecode(response.body)),
       );
     }
 

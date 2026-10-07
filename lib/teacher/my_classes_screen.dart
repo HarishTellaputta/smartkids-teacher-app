@@ -16,6 +16,11 @@ class MyClassesScreen extends StatefulWidget {
 }
 
 class _MyClassesScreenState extends State<MyClassesScreen> {
+  static const Color primaryColor = Color(0xff1565C0);
+  static const Color secondaryColor = Color(0xff42A5F5);
+  static const Color backgroundColor = Color(0xffF5F8FC);
+  static const Color textColor = Color(0xff172033);
+
   List<TeacherAssignmentModel> assignments = [];
   final Map<int, ClassModel> classDetails = {};
 
@@ -27,6 +32,10 @@ class _MyClassesScreenState extends State<MyClassesScreen> {
     super.initState();
     _loadClasses();
   }
+
+  // ============================================================
+  // LOAD CLASSES
+  // ============================================================
 
   Future<void> _loadClasses() async {
     try {
@@ -40,9 +49,10 @@ class _MyClassesScreenState extends State<MyClassesScreen> {
         });
       }
 
-      // -----------------------------------------
-      // GET LOGIN TOKEN
-      // -----------------------------------------
+      // ----------------------------------------------------------
+      // TOKEN
+      // ----------------------------------------------------------
+
       final token = await AuthStorage.getToken();
 
       debugPrint('TOKEN EXISTS: ${token != null && token.isNotEmpty}');
@@ -51,9 +61,10 @@ class _MyClassesScreenState extends State<MyClassesScreen> {
         throw Exception('Login token not found. Please login again.');
       }
 
-      // -----------------------------------------
-      // GET LOGGED-IN TEACHER ID
-      // -----------------------------------------
+      // ----------------------------------------------------------
+      // TEACHER ID
+      // ----------------------------------------------------------
+
       final teacherId = await AuthStorage.getTeacherId();
 
       debugPrint('TEACHER ID FROM STORAGE: $teacherId');
@@ -66,49 +77,30 @@ class _MyClassesScreenState extends State<MyClassesScreen> {
         throw Exception('Invalid Teacher ID. Please login again.');
       }
 
-      debugPrint('Using Teacher ID: $teacherId');
-      debugPrint('Calling TeacherService...');
-
-      // -----------------------------------------
+      // ----------------------------------------------------------
       // SERVICES
-      // -----------------------------------------
+      // ----------------------------------------------------------
+
       final teacherService = TeacherService(token);
       final classService = ClassService(token);
 
-      // -----------------------------------------
-      // GET TEACHER ASSIGNMENTS
-      // -----------------------------------------
+      // ----------------------------------------------------------
+      // TEACHER ASSIGNMENTS
+      // ----------------------------------------------------------
+
       final result = await teacherService.getTeacherAssignments(teacherId);
 
       debugPrint('Teacher assignments received: ${result.length}');
 
-      for (final assignment in result) {
-        debugPrint(
-          'ASSIGNMENT -> '
-          'Class ID: ${assignment.classId}, '
-          'Subject: ${assignment.subject}',
-        );
-      }
-
-      // -----------------------------------------
+      // ----------------------------------------------------------
       // LOAD CLASS DETAILS
-      // -----------------------------------------
+      // ----------------------------------------------------------
+
       final Map<int, ClassModel> loadedClasses = {};
 
       for (final assignment in result) {
         try {
-          debugPrint(
-            'Calling ClassService for class ID: '
-            '${assignment.classId}',
-          );
-
           final classData = await classService.getClassById(assignment.classId);
-
-          debugPrint(
-            'CLASS RECEIVED -> '
-            'ID: ${classData.id}, '
-            'Name: ${classData.name}',
-          );
 
           loadedClasses[assignment.classId] = classData;
         } catch (e) {
@@ -116,9 +108,10 @@ class _MyClassesScreenState extends State<MyClassesScreen> {
         }
       }
 
-      // -----------------------------------------
+      // ----------------------------------------------------------
       // UPDATE UI
-      // -----------------------------------------
+      // ----------------------------------------------------------
+
       if (!mounted) return;
 
       setState(() {
@@ -149,6 +142,10 @@ class _MyClassesScreenState extends State<MyClassesScreen> {
     }
   }
 
+  // ============================================================
+  // CLASS NAME
+  // ============================================================
+
   String _getClassName(TeacherAssignmentModel assignment) {
     final classData = classDetails[assignment.classId];
 
@@ -159,188 +156,176 @@ class _MyClassesScreenState extends State<MyClassesScreen> {
     return 'Class ${assignment.classId}';
   }
 
+  // ============================================================
+  // UNIQUE CLASSES
+  // ============================================================
+
+  int get _uniqueClassCount {
+    return assignments.map((e) => e.classId).toSet().length;
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xffF5F8FC),
+      backgroundColor: backgroundColor,
 
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xff1565C0),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+
+        leading: IconButton(
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.arrow_back_rounded, color: textColor),
+        ),
 
         title: Text(
-          "My Classes",
+          'My Classes',
           style: GoogleFonts.poppins(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
+            color: textColor,
+            fontSize: 19,
+            fontWeight: FontWeight.w700,
           ),
         ),
 
-        centerTitle: true,
+        actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+
+            decoration: BoxDecoration(
+              color: const Color(0xffF1F6FC),
+              borderRadius: BorderRadius.circular(12),
+            ),
+
+            child: IconButton(
+              onPressed: _loadClasses,
+
+              icon: const Icon(
+                Icons.refresh_rounded,
+                color: primaryColor,
+                size: 21,
+              ),
+            ),
+          ),
+        ],
       ),
 
       body: _buildBody(),
     );
   }
 
+  // ============================================================
+  // BODY
+  // ============================================================
+
   Widget _buildBody() {
     if (isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildLoading();
     }
 
     if (errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-
-            children: [
-              const Icon(Icons.error_outline, size: 55, color: Colors.red),
-
-              const SizedBox(height: 15),
-
-              Text(
-                "Unable to load classes",
-                style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              Text(
-                errorMessage!,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              ElevatedButton(
-                onPressed: _loadClasses,
-                child: const Text("Retry"),
-              ),
-            ],
-          ),
-        ),
-      );
+      return _buildError();
     }
 
     if (assignments.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: _loadClasses,
-
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-
-          children: [
-            SizedBox(height: MediaQuery.of(context).size.height * 0.35),
-
-            Center(
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.school_outlined,
-                    size: 60,
-                    color: Colors.grey.shade400,
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  Text(
-                    "No classes assigned",
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildEmpty();
     }
 
     return RefreshIndicator(
+      color: primaryColor,
       onRefresh: _loadClasses,
 
-      child: ListView(
+      child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
 
-        padding: const EdgeInsets.all(20),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
 
-        children: [
-          Text(
-            "Assigned Classes",
-            style: GoogleFonts.poppins(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
+            sliver: SliverToBoxAdapter(child: _buildSummaryHeader()),
           ),
 
-          const SizedBox(height: 5),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(18, 22, 18, 10),
 
-          Text(
-            "${assignments.length} subject assignment${assignments.length == 1 ? '' : 's'}",
-            style: GoogleFonts.poppins(
-              fontSize: 13,
-              color: Colors.grey.shade600,
-            ),
+            sliver: SliverToBoxAdapter(child: _buildSectionHeader()),
           ),
 
-          const SizedBox(height: 15),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 30),
 
-          ...assignments.map((assignment) => _classCard(context, assignment)),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final assignment = assignments[index];
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: _classCard(context, assignment, index),
+                );
+              }, childCount: assignments.length),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _classCard(BuildContext context, TeacherAssignmentModel assignment) {
-    final className = _getClassName(assignment);
+  // ============================================================
+  // SUMMARY HEADER
+  // ============================================================
 
+  Widget _buildSummaryHeader() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 15),
+      width: double.infinity,
 
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(21),
 
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          colors: [primaryColor, secondaryColor],
 
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4)),
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+
+        borderRadius: BorderRadius.circular(26),
+
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withOpacity(0.22),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+          ),
         ],
       ),
 
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+
         children: [
           Row(
             children: [
               Container(
-                height: 55,
-                width: 55,
+                width: 52,
+                height: 52,
 
-                decoration: const BoxDecoration(
-                  color: Color(0xffE3F2FD),
-                  shape: BoxShape.circle,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.16),
+                  borderRadius: BorderRadius.circular(16),
                 ),
 
                 child: const Icon(
-                  Icons.school,
-                  color: Color(0xff1565C0),
-                  size: 30,
+                  Icons.school_rounded,
+                  color: Colors.white,
+                  size: 27,
                 ),
               ),
 
-              const SizedBox(width: 15),
+              const SizedBox(width: 14),
 
               Expanded(
                 child: Column(
@@ -348,97 +333,111 @@ class _MyClassesScreenState extends State<MyClassesScreen> {
 
                   children: [
                     Text(
-                      className,
+                      'Teaching Dashboard',
+
                       style: GoogleFonts.poppins(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
 
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
 
                     Text(
-                      assignment.subject,
-                      style: GoogleFonts.poppins(color: Colors.grey),
+                      'Manage your assigned classes',
+
+                      style: GoogleFonts.poppins(
+                        color: Colors.white.withOpacity(0.82),
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
               ),
-
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-
-                child: Text(
-                  "Active",
-                  style: GoogleFonts.poppins(
-                    color: Colors.green,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
             ],
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 22),
 
           Row(
             children: [
               Expanded(
-                child: _infoTile(
-                  Icons.class_,
-                  "Class ID: ${assignment.classId}",
+                child: _summaryStat(
+                  icon: Icons.groups_rounded,
+                  value: _uniqueClassCount.toString(),
+                  label: 'Classes',
                 ),
               ),
 
-              Expanded(child: _infoTile(Icons.menu_book, assignment.subject)),
+              const SizedBox(width: 10),
+
+              Expanded(
+                child: _summaryStat(
+                  icon: Icons.menu_book_rounded,
+                  value: assignments.length.toString(),
+                  label: 'Subjects',
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              Expanded(
+                child: _summaryStat(
+                  icon: Icons.verified_rounded,
+                  value: 'Active',
+                  label: 'Status',
+                ),
+              ),
             ],
           ),
+        ],
+      ),
+    );
+  }
 
-          const SizedBox(height: 15),
+  Widget _summaryStat({
+    required IconData icon,
+    required String value,
+    required String label,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
 
-          SizedBox(
-            width: double.infinity,
-            height: 45,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.13),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.12)),
+      ),
 
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xff1565C0),
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.white, size: 19),
 
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-              ),
+          const SizedBox(height: 6),
 
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ClassWorkspaceScreen(
-                      classId: assignment.classId,
-                      className: className,
-                      subject: assignment.subject,
-                      students: "Students",
-                    ),
-                  ),
-                );
-              },
+          Text(
+            value,
 
-              child: Text(
-                "View Students",
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+
+          const SizedBox(height: 1),
+
+          Text(
+            label,
+
+            style: GoogleFonts.poppins(
+              color: Colors.white.withOpacity(0.75),
+              fontSize: 9.5,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -446,23 +445,716 @@ class _MyClassesScreenState extends State<MyClassesScreen> {
     );
   }
 
-  Widget _infoTile(IconData icon, String text) {
+  // ============================================================
+  // SECTION HEADER
+  // ============================================================
+
+  Widget _buildSectionHeader() {
     return Row(
       children: [
-        Icon(icon, size: 18, color: const Color(0xff1565C0)),
-
-        const SizedBox(width: 8),
-
         Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+
+            children: [
+              Text(
+                'Assigned Classes',
+
+                style: GoogleFonts.poppins(
+                  color: textColor,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+
+              const SizedBox(height: 2),
+
+              Text(
+                'Your teaching assignments',
+
+                style: GoogleFonts.poppins(
+                  color: const Color(0xff8993A2),
+                  fontSize: 11.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+
+          decoration: BoxDecoration(
+            color: const Color(0xffEAF3FF),
+            borderRadius: BorderRadius.circular(20),
+          ),
+
           child: Text(
-            text,
+            '${assignments.length} assignments',
+
             style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: Colors.grey.shade700,
+              color: primaryColor,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
       ],
+    );
+  }
+
+  // ============================================================
+  // CLASS CARD
+  // ============================================================
+
+  Widget _classCard(
+    BuildContext context,
+    TeacherAssignmentModel assignment,
+    int index,
+  ) {
+    final className = _getClassName(assignment);
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(23),
+
+      child: InkWell(
+        borderRadius: BorderRadius.circular(23),
+
+        onTap: () {
+          _openClassWorkspace(context, assignment, className);
+        },
+
+        child: Container(
+          padding: const EdgeInsets.all(17),
+
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(23),
+
+            border: Border.all(color: const Color(0xffE5EAF1)),
+          ),
+
+          child: Column(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+
+                children: [
+                  // ==================================================
+                  // CLASS ICON
+                  // ==================================================
+
+                  Container(
+                    width: 55,
+                    height: 55,
+
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xffE3F2FD), Color(0xffBBDEFB)],
+
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+
+                      borderRadius: BorderRadius.circular(17),
+                    ),
+
+                    child: const Icon(
+                      Icons.class_rounded,
+                      color: primaryColor,
+                      size: 28,
+                    ),
+                  ),
+
+                  const SizedBox(width: 13),
+
+                  // ==================================================
+                  // CLASS DETAILS
+                  // ==================================================
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+
+                      children: [
+                        Text(
+                          className,
+
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+
+                          style: GoogleFonts.poppins(
+                            color: textColor,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+
+                        const SizedBox(height: 6),
+
+                        // SUBJECT
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.menu_book_outlined,
+                              size: 14,
+                              color: Color(0xff7B8797),
+                            ),
+
+                            const SizedBox(width: 5),
+
+                            Expanded(
+                              child: Text(
+                                assignment.subject.isNotEmpty
+                                    ? assignment.subject
+                                    : 'Subject not available',
+
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+
+                                style: GoogleFonts.poppins(
+                                  color: const Color(0xff7B8797),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 7),
+
+                        // SECTION BADGE
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 5,
+                          ),
+
+                          decoration: BoxDecoration(
+                            color: const Color(0xffEAF3FF),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+
+                            children: [
+                              const Icon(
+                                Icons.groups_rounded,
+                                size: 13,
+                                color: primaryColor,
+                              ),
+
+                              const SizedBox(width: 5),
+
+                              Text(
+                                'Section ${assignment.sectionName ?? '-'}',
+
+                                style: GoogleFonts.poppins(
+                                  color: primaryColor,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // ==================================================
+                  // STATUS
+                  // ==================================================
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 5,
+                    ),
+
+                    decoration: BoxDecoration(
+                      color: const Color(0xffE8F5E9),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+
+                          decoration: const BoxDecoration(
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+
+                        const SizedBox(width: 5),
+
+                        Text(
+                          'Active',
+
+                          style: GoogleFonts.poppins(
+                            color: Colors.green.shade700,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // ==================================================
+              // DETAILS
+              // ==================================================
+              Container(
+                padding: const EdgeInsets.all(12),
+
+                decoration: BoxDecoration(
+                  color: const Color(0xffF7F9FC),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _detailItem(
+                        icon: Icons.tag_rounded,
+                        label: 'Class ID',
+                        value: assignment.classId.toString(),
+                      ),
+                    ),
+
+                    Container(
+                      width: 1,
+                      height: 34,
+                      color: const Color(0xffE3E8EF),
+                    ),
+
+                    Expanded(
+                      child: _detailItem(
+                        icon: Icons.groups_rounded,
+                        label: 'Section',
+                        value: assignment.sectionName ?? '-',
+                      ),
+                    ),
+
+                    Container(
+                      width: 1,
+                      height: 34,
+                      color: const Color(0xffE3E8EF),
+                    ),
+
+                    Expanded(
+                      child: _detailItem(
+                        icon: Icons.subject_rounded,
+                        label: 'Subject',
+                        value: assignment.subject,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              // ==================================================
+              // OPEN WORKSPACE BUTTON
+              // ==================================================
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+
+                child: ElevatedButton(
+                  onPressed: () {
+                    _openClassWorkspace(context, assignment, className);
+                  },
+
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+
+                    children: [
+                      Text(
+                        'Open Class Workspace',
+
+                        style: GoogleFonts.poppins(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+
+                      const SizedBox(width: 7),
+
+                      const Icon(Icons.arrow_forward_rounded, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // DETAIL ITEM
+  // ============================================================
+
+  Widget _detailItem({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+          ),
+
+          child: Icon(icon, size: 16, color: primaryColor),
+        ),
+
+        const SizedBox(width: 8),
+
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+
+            children: [
+              Text(
+                label,
+
+                style: GoogleFonts.poppins(
+                  color: const Color(0xff929BA8),
+                  fontSize: 9.5,
+                ),
+              ),
+
+              const SizedBox(height: 1),
+
+              Text(
+                value,
+
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+
+                style: GoogleFonts.poppins(
+                  color: textColor,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // OPEN WORKSPACE
+  // ============================================================
+
+  void _openClassWorkspace(
+    BuildContext context,
+    TeacherAssignmentModel assignment,
+    String className,
+  ) {
+    // ----------------------------------------------------------
+    // SECTION VALIDATION
+    // ----------------------------------------------------------
+
+    if (assignment.sectionId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Section is not assigned for this teaching assignment.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    // ----------------------------------------------------------
+    // SUBJECT VALIDATION
+    // ----------------------------------------------------------
+
+    if (assignment.subjectId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Subject is not properly assigned for this teaching assignment.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    // ----------------------------------------------------------
+    // OPEN CLASS WORKSPACE
+    // ----------------------------------------------------------
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ClassWorkspaceScreen(
+          classId: assignment.classId,
+          className: className,
+          subjectId: assignment.subjectId!,
+          subject: assignment.subject,
+          sectionId: assignment.sectionId!,
+          sectionName: assignment.sectionName ?? '',
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // LOADING
+  // ============================================================
+
+  Widget _buildLoading() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+
+        children: [
+          Container(
+            width: 65,
+            height: 65,
+
+            decoration: BoxDecoration(
+              color: const Color(0xffEAF3FF),
+              borderRadius: BorderRadius.circular(20),
+            ),
+
+            child: const Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                color: primaryColor,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          Text(
+            'Loading your classes...',
+
+            style: GoogleFonts.poppins(
+              color: textColor,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+
+          const SizedBox(height: 5),
+
+          Text(
+            'Please wait a moment',
+
+            style: GoogleFonts.poppins(
+              color: const Color(0xff8A94A3),
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // ERROR
+  // ============================================================
+
+  Widget _buildError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(30),
+
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+
+          children: [
+            Container(
+              width: 76,
+              height: 76,
+
+              decoration: BoxDecoration(
+                color: const Color(0xffffebee),
+                borderRadius: BorderRadius.circular(24),
+              ),
+
+              child: const Icon(
+                Icons.cloud_off_rounded,
+                color: Colors.redAccent,
+                size: 38,
+              ),
+            ),
+
+            const SizedBox(height: 18),
+
+            Text(
+              'Unable to load classes',
+
+              style: GoogleFonts.poppins(
+                color: textColor,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+
+            const SizedBox(height: 7),
+
+            Text(
+              errorMessage ?? 'Something went wrong.',
+
+              textAlign: TextAlign.center,
+
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+
+              style: GoogleFonts.poppins(
+                color: const Color(0xff7A8697),
+                fontSize: 11.5,
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            ElevatedButton.icon(
+              onPressed: _loadClasses,
+
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+
+              label: Text(
+                'Try Again',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+              ),
+
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryColor,
+                foregroundColor: Colors.white,
+                elevation: 0,
+
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 12,
+                ),
+
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // EMPTY
+  // ============================================================
+
+  Widget _buildEmpty() {
+    return RefreshIndicator(
+      color: primaryColor,
+      onRefresh: _loadClasses,
+
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+
+        children: [
+          SizedBox(height: MediaQuery.of(context).size.height * 0.28),
+
+          Center(
+            child: Column(
+              children: [
+                Container(
+                  width: 82,
+                  height: 82,
+
+                  decoration: BoxDecoration(
+                    color: const Color(0xffEAF3FF),
+                    borderRadius: BorderRadius.circular(26),
+                  ),
+
+                  child: const Icon(
+                    Icons.school_outlined,
+                    color: primaryColor,
+                    size: 42,
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+
+                Text(
+                  'No classes assigned',
+
+                  style: GoogleFonts.poppins(
+                    color: textColor,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+
+                const SizedBox(height: 6),
+
+                Text(
+                  'Your assigned classes will appear here.',
+
+                  textAlign: TextAlign.center,
+
+                  style: GoogleFonts.poppins(
+                    color: const Color(0xff8993A2),
+                    fontSize: 12,
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                Text(
+                  'Pull down to refresh',
+
+                  style: GoogleFonts.poppins(
+                    color: primaryColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

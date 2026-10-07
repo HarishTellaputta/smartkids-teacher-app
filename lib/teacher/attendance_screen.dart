@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -13,6 +12,7 @@ class AttendanceScreen extends StatefulWidget {
   final int teacherId;
   final String className;
   final int sectionId;
+  final String sectionName;
 
   const AttendanceScreen({
     super.key,
@@ -20,6 +20,7 @@ class AttendanceScreen extends StatefulWidget {
     required this.teacherId,
     required this.className,
     required this.sectionId,
+    required this.sectionName,
   });
 
   @override
@@ -27,13 +28,18 @@ class AttendanceScreen extends StatefulWidget {
 }
 
 class _AttendanceScreenState extends State<AttendanceScreen> {
+  // ============================================================
+  // DATA
+  // ============================================================
+
   List<StudentModel> students = [];
 
   // true  = PRESENT
   // false = ABSENT
   final Map<int, bool> attendance = {};
 
-  // Already saved attendance for today
+  // Existing attendance for TODAY,
+  // but ONLY for the currently assigned section.
   List<AttendanceModel> existingAttendance = [];
 
   bool isLoading = true;
@@ -41,9 +47,23 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   String? errorMessage;
 
+  // ============================================================
+  // INIT
+  // ============================================================
+
   @override
   void initState() {
     super.initState();
+
+    debugPrint('========================================');
+    debugPrint('ATTENDANCE SCREEN INITIALIZED');
+    debugPrint('CLASS ID    : ${widget.classId}');
+    debugPrint('CLASS NAME  : ${widget.className}');
+    debugPrint('SECTION ID  : ${widget.sectionId}');
+    debugPrint('SECTION NAME: ${widget.sectionName}');
+    debugPrint('TEACHER ID  : ${widget.teacherId}');
+    debugPrint('========================================');
+
     _loadStudents();
   }
 
@@ -77,34 +97,41 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       }
 
       debugPrint('========================================');
-      debugPrint('ATTENDANCE: START');
-      debugPrint('CLASS ID: ${widget.classId}');
-      debugPrint('SECTION ID: ${widget.sectionId}');
-      debugPrint('TEACHER ID: ${widget.teacherId}');
+      debugPrint('ATTENDANCE: LOADING SECTION STUDENTS');
+      debugPrint('CLASS ID   : ${widget.classId}');
+      debugPrint('SECTION ID : ${widget.sectionId}');
+      debugPrint('TEACHER ID : ${widget.teacherId}');
+      debugPrint('========================================');
 
       final token = await _getToken();
 
-      debugPrint(
-        'Loading students using section API...',
-      );
-
       final studentService = StudentService(token);
 
+      // IMPORTANT:
+      // We intentionally use SECTION API.
+      //
+      // This means:
+      // Section A -> Section A students only
+      // Section B -> Section B students only
+      //
+      // Teacher cannot switch sections from this screen.
       final loadedStudents =
           await studentService.getStudentsBySectionId(
         widget.sectionId,
       );
 
       debugPrint(
-        'Students received: ${loadedStudents.length}',
+        'Students received for Section '
+        '${widget.sectionName}: ${loadedStudents.length}',
       );
 
       for (final student in loadedStudents) {
         debugPrint(
-          'ATTENDANCE STUDENT -> '
+          'SECTION STUDENT -> '
           'ID: ${student.id}, '
           'NAME: ${student.name}, '
-          'ROLL: ${student.rollNumber}',
+          'ROLL: ${student.rollNumber}, '
+          'SECTION ID: ${student.sectionId}',
         );
       }
 
@@ -115,13 +142,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
         attendance.clear();
 
-        // Default every student to PRESENT.
+        // Default all students to PRESENT.
         for (final student in students) {
           attendance[student.id] = true;
         }
       });
 
-      // Load today's existing attendance.
+      // Load today's saved attendance.
       await _loadTodayAttendance();
 
       if (!mounted) return;
@@ -131,7 +158,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       });
 
       debugPrint(
-        'TOTAL ATTENDANCE STUDENTS: ${students.length}',
+        'TOTAL SECTION STUDENTS: ${students.length}',
       );
 
       debugPrint('ATTENDANCE: FINISHED');
@@ -164,39 +191,84 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           DateTime.now().toIso8601String().split('T').first;
 
       debugPrint(
+        '========================================',
+      );
+
+      debugPrint(
         'Loading attendance for class '
         '${widget.classId} on $today',
       );
 
-      final result =
-          await service.getClassAttendance(
+      final result = await service.getClassAttendance(
         classId: widget.classId,
         date: today,
+      );
+
+      debugPrint(
+        'Total class attendance records received: '
+        '${result.length}',
+      );
+
+      // ========================================================
+      // IMPORTANT
+      // ========================================================
+      //
+      // Backend endpoint is class-level.
+      //
+      // Therefore it may return:
+      //
+      // Section A -> students
+      // Section B -> students
+      // Section C -> students
+      //
+      // We MUST filter it to the currently assigned section.
+      //
+      // This prevents Section B attendance from affecting
+      // Section A screen.
+      // ========================================================
+
+      final sectionStudentIds =
+          students.map((student) => student.id).toSet();
+
+      final sectionAttendance = result.where(
+        (record) =>
+            sectionStudentIds.contains(record.studentId),
+      ).toList();
+
+      debugPrint(
+        'Current Section ${widget.sectionName} '
+        'attendance records: '
+        '${sectionAttendance.length}',
       );
 
       if (!mounted) return;
 
       setState(() {
-        existingAttendance = result;
+        existingAttendance = sectionAttendance;
 
-        // Apply saved attendance.
-        for (final record in result) {
+        // Apply saved attendance ONLY for this section.
+        for (final record in sectionAttendance) {
           attendance[record.studentId] =
               record.status == 'PRESENT';
         }
       });
 
       debugPrint(
-        'Existing attendance records: '
-        '${result.length}',
+        'Today attendance applied for Section '
+        '${widget.sectionName}',
+      );
+
+      debugPrint(
+        '========================================',
       );
     } catch (e) {
       debugPrint(
         'Error loading today attendance: $e',
       );
 
-      // If attendance is not marked yet,
-      // don't block the screen.
+      // Attendance may not have been marked yet.
+      //
+      // Do NOT block the screen.
       existingAttendance = [];
     }
   }
@@ -209,7 +281,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     if (students.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No students found.'),
+          content: Text(
+            'No students found for this section.',
+          ),
         ),
       );
 
@@ -230,17 +304,30 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       final today =
           DateTime.now().toIso8601String().split('T').first;
 
-      // Existing records mapped by student ID.
+      // ========================================================
+      // EXISTING RECORDS
+      // ========================================================
+
       final Map<int, AttendanceModel> existingByStudent = {
         for (final record in existingAttendance)
           record.studentId: record,
       };
 
-      // New attendance records.
+      // ========================================================
+      // NEW RECORDS
+      // ========================================================
+
       final List<Map<String, dynamic>> newRecords = [];
 
-      // Existing records whose status changed.
+      // ========================================================
+      // UPDATED RECORDS
+      // ========================================================
+
       final List<AttendanceModel> recordsToUpdate = [];
+
+      // ========================================================
+      // PROCESS CURRENT SECTION STUDENTS ONLY
+      // ========================================================
 
       for (final student in students) {
         final isPresent =
@@ -252,9 +339,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         final existing =
             existingByStudent[student.id];
 
-        // --------------------------------------------------------
+        // ------------------------------------------------------
         // NEW RECORD
-        // --------------------------------------------------------
+        // ------------------------------------------------------
 
         if (existing == null) {
           newRecords.add({
@@ -264,9 +351,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           });
         }
 
-        // --------------------------------------------------------
+        // ------------------------------------------------------
         // UPDATE EXISTING RECORD
-        // --------------------------------------------------------
+        // ------------------------------------------------------
 
         else if (existing.status != status) {
           recordsToUpdate.add(
@@ -284,18 +371,41 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       }
 
       debugPrint(
-        'New attendance records: '
-        '${newRecords.length}',
+        '========================================',
       );
 
       debugPrint(
-        'Attendance records to update: '
+        'Saving attendance',
+      );
+
+      debugPrint(
+        'Class ID: ${widget.classId}',
+      );
+
+      debugPrint(
+        'Section ID: ${widget.sectionId}',
+      );
+
+      debugPrint(
+        'Section Name: ${widget.sectionName}',
+      );
+
+      debugPrint(
+        'New records: ${newRecords.length}',
+      );
+
+      debugPrint(
+        'Records to update: '
         '${recordsToUpdate.length}',
       );
 
-      // ==========================================================
+      debugPrint(
+        '========================================',
+      );
+
+      // ========================================================
       // BULK CREATE
-      // ==========================================================
+      // ========================================================
 
       if (newRecords.isNotEmpty) {
         await service.markBulkAttendance(
@@ -306,9 +416,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         );
       }
 
-      // ==========================================================
+      // ========================================================
       // UPDATE EXISTING
-      // ==========================================================
+      // ========================================================
 
       for (final record in recordsToUpdate) {
         if (record.id == null) {
@@ -323,15 +433,19 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         );
       }
 
-      // Reload today's attendance.
+      // ========================================================
+      // RELOAD
+      // ========================================================
+
       await _loadTodayAttendance();
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Attendance Marked Successfully',
+            'Section ${widget.sectionName} attendance '
+            'marked successfully.',
           ),
           backgroundColor: Colors.green,
         ),
@@ -396,7 +510,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
       body: isLoading
           ? const Center(
-              child: CircularProgressIndicator(),
+              child: CircularProgressIndicator(
+                color: Color(0xff1565C0),
+              ),
             )
           : errorMessage != null
               ? _buildError()
@@ -421,7 +537,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               MainAxisAlignment.center,
 
           children: [
-
             const Icon(
               Icons.error_outline_rounded,
               size: 52,
@@ -441,7 +556,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             const SizedBox(height: 8),
 
             Text(
-              errorMessage!,
+              errorMessage ?? 'Something went wrong.',
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
                 fontSize: 12,
@@ -453,6 +568,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
             ElevatedButton(
               onPressed: _loadStudents,
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    const Color(0xff1565C0),
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Retry'),
             ),
           ],
@@ -471,7 +591,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   ) {
     return Column(
       children: [
-
         // ========================================================
         // HEADER
         // ========================================================
@@ -507,30 +626,128 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 CrossAxisAlignment.start,
 
             children: [
-
-              // Class name
-              Text(
-                widget.className,
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xff1565C0),
-                ),
-              ),
-
-              const SizedBox(height: 10),
+              // ==================================================
+              // CLASS + SECTION
+              // ==================================================
 
               Row(
                 children: [
+                  Container(
+                    width: 42,
+                    height: 42,
 
-                  // Today
+                    decoration: BoxDecoration(
+                      color: const Color(0xffE3F2FD),
+                      borderRadius:
+                          BorderRadius.circular(11),
+                    ),
+
+                    child: const Icon(
+                      Icons.groups_rounded,
+                      color: Color(0xff1565C0),
+                      size: 23,
+                    ),
+                  ),
+
+                  const SizedBox(width: 11),
+
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
+
+                      children: [
+                        Text(
+                          widget.className,
+                          maxLines: 1,
+                          overflow:
+                              TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight:
+                                FontWeight.w700,
+                            color:
+                                const Color(0xff1565C0),
+                          ),
+                        ),
+
+                        const SizedBox(height: 2),
+
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.lock_outline_rounded,
+                              size: 12,
+                              color: Colors.grey,
+                            ),
+
+                            const SizedBox(width: 4),
+
+                            Text(
+                              'Section ${widget.sectionName}',
+                              style:
+                                  GoogleFonts.poppins(
+                                fontSize: 11,
+                                color:
+                                    Colors.grey.shade700,
+                                fontWeight:
+                                    FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // STUDENT COUNT
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 6,
+                    ),
+
+                    decoration: BoxDecoration(
+                      color: const Color(0xffF5F8FC),
+                      borderRadius:
+                          BorderRadius.circular(9),
+                    ),
+
+                    child: Text(
+                      '${students.length} Students',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight:
+                            FontWeight.w600,
+                        color:
+                            Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 14),
+
+              const Divider(
+                height: 1,
+              ),
+
+              const SizedBox(height: 11),
+
+              // ==================================================
+              // DATE + COUNTS
+              // ==================================================
+
+              Row(
+                children: [
                   Expanded(
                     child: Row(
                       children: [
-
                         const Icon(
                           Icons.calendar_today_outlined,
-                          size: 16,
+                          size: 15,
                           color: Colors.grey,
                         ),
 
@@ -540,14 +757,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                           _todayDate(),
                           style: GoogleFonts.poppins(
                             fontSize: 11,
-                            color: Colors.grey.shade700,
+                            color:
+                                Colors.grey.shade700,
+                            fontWeight:
+                                FontWeight.w500,
                           ),
                         ),
                       ],
                     ),
                   ),
 
-                  // Present
                   _countBadge(
                     '$presentCount Present',
                     Colors.green,
@@ -555,7 +774,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
                   const SizedBox(width: 6),
 
-                  // Absent
                   _countBadge(
                     '$absentCount Absent',
                     Colors.red,
@@ -567,7 +785,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         ),
 
         // ========================================================
-        // SMALL INSTRUCTION
+        // SMALL HEADER
         // ========================================================
 
         Padding(
@@ -580,7 +798,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
           child: Row(
             children: [
-
               Text(
                 'Roll No',
                 style: GoogleFonts.poppins(
@@ -622,14 +839,45 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         Expanded(
           child: students.isEmpty
               ? Center(
-                  child: Text(
-                    'No students found',
-                    style: GoogleFonts.poppins(
-                      color: Colors.grey,
-                    ),
+                  child: Column(
+                    mainAxisAlignment:
+                        MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.people_outline_rounded,
+                        size: 48,
+                        color: Colors.grey.shade400,
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      Text(
+                        'No students found',
+                        style: GoogleFonts.poppins(
+                          color: Colors.grey,
+                          fontWeight:
+                              FontWeight.w500,
+                        ),
+                      ),
+
+                      const SizedBox(height: 4),
+
+                      Text(
+                        'No students are assigned to '
+                        'Section ${widget.sectionName}.',
+                        textAlign:
+                            TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color:
+                              Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
                   ),
                 )
               : RefreshIndicator(
+                  color: const Color(0xff1565C0),
                   onRefresh: _loadStudents,
 
                   child: ListView.builder(
@@ -715,15 +963,29 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                         strokeWidth: 2,
                       ),
                     )
-                  : Text(
-                      'Mark Attendance',
-                      style:
-                          GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight:
-                            FontWeight.w600,
-                      ),
+                  : Row(
+                      mainAxisAlignment:
+                          MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.check_circle_outline,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+
+                        const SizedBox(width: 8),
+
+                        Text(
+                          'Mark Attendance',
+                          style:
+                              GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight:
+                                FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
             ),
           ),
@@ -763,7 +1025,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
       child: Row(
         children: [
-
           // ======================================================
           // ROLL NUMBER
           // ======================================================
@@ -803,19 +1064,36 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           // ======================================================
 
           Expanded(
-            child: Text(
-              student.name,
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
 
-              maxLines: 1,
+              children: [
+                Text(
+                  student.name,
 
-              overflow:
-                  TextOverflow.ellipsis,
+                  maxLines: 1,
 
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                fontWeight:
-                    FontWeight.w600,
-              ),
+                  overflow:
+                      TextOverflow.ellipsis,
+
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight:
+                        FontWeight.w600,
+                  ),
+                ),
+
+                const SizedBox(height: 2),
+
+                Text(
+                  'Roll No: ${student.rollNumber.isNotEmpty ? student.rollNumber : '-'}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 9,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+              ],
             ),
           ),
 
@@ -830,7 +1108,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 MainAxisSize.min,
 
             children: [
-
               Text(
                 isPresent ? 'ON' : 'OFF',
 

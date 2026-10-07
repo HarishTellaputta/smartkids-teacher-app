@@ -6,7 +6,7 @@ class AuthService {
   AuthService()
       : _dio = Dio(
           BaseOptions(
-            baseUrl: 'http://10.51.231.80:8080',
+            baseUrl: 'http://10.24.241.80:8080',
             connectTimeout: const Duration(seconds: 15),
             receiveTimeout: const Duration(seconds: 15),
             headers: {'Content-Type': 'application/json'},
@@ -219,4 +219,6 @@ class AuthService {
       rethrow;
     }
   }
+
+ 
 }
