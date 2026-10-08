@@ -45,6 +45,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   bool isLoading = true;
   bool isSaving = false;
 
+  // Attendance was already submitted for today.
+  bool attendanceMarkedToday = false;
+
+  bool attendanceChanged = false;
+
+  // Stores today's originally saved attendance.
+  // studentId -> true(PRESENT) / false(ABSENT)
+  final Map<int, bool> originalAttendance = {};
   String? errorMessage;
 
   // ============================================================
@@ -75,9 +83,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final token = await AuthStorage.getToken();
 
     if (token == null || token.isEmpty) {
-      throw Exception(
-        'Login token not found. Please login again.',
-      );
+      throw Exception('Login token not found. Please login again.');
     }
 
     return token;
@@ -115,8 +121,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       // Section B -> Section B students only
       //
       // Teacher cannot switch sections from this screen.
-      final loadedStudents =
-          await studentService.getStudentsBySectionId(
+      final loadedStudents = await studentService.getStudentsBySectionId(
         widget.sectionId,
       );
 
@@ -141,11 +146,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         students = loadedStudents;
 
         attendance.clear();
+        originalAttendance.clear();
 
-        // Default all students to PRESENT.
+        // Before today's attendance is loaded,
+        // default everyone to PRESENT.
         for (final student in students) {
           attendance[student.id] = true;
         }
+
+        attendanceMarkedToday = false;
+        attendanceChanged = false;
       });
 
       // Load today's saved attendance.
@@ -157,16 +167,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         isLoading = false;
       });
 
-      debugPrint(
-        'TOTAL SECTION STUDENTS: ${students.length}',
-      );
+      debugPrint('TOTAL SECTION STUDENTS: ${students.length}');
 
       debugPrint('ATTENDANCE: FINISHED');
       debugPrint('========================================');
     } catch (e) {
-      debugPrint(
-        'ATTENDANCE STUDENT ERROR: $e',
-      );
+      debugPrint('ATTENDANCE STUDENT ERROR: $e');
 
       if (!mounted) return;
 
@@ -187,12 +193,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
       final service = AttendanceService(token);
 
-      final today =
-          DateTime.now().toIso8601String().split('T').first;
+      final today = DateTime.now().toIso8601String().split('T').first;
 
-      debugPrint(
-        '========================================',
-      );
+      debugPrint('========================================');
 
       debugPrint(
         'Loading attendance for class '
@@ -227,13 +230,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       // Section A screen.
       // ========================================================
 
-      final sectionStudentIds =
-          students.map((student) => student.id).toSet();
+      final sectionStudentIds = students.map((student) => student.id).toSet();
 
-      final sectionAttendance = result.where(
-        (record) =>
-            sectionStudentIds.contains(record.studentId),
-      ).toList();
+      final sectionAttendance = result
+          .where((record) => sectionStudentIds.contains(record.studentId))
+          .toList();
 
       debugPrint(
         'Current Section ${widget.sectionName} '
@@ -246,10 +247,21 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       setState(() {
         existingAttendance = sectionAttendance;
 
-        // Apply saved attendance ONLY for this section.
+        attendanceMarkedToday = sectionAttendance.isNotEmpty;
+
+        attendanceChanged = false;
+
+        originalAttendance.clear();
+
+        // Apply saved attendance.
         for (final record in sectionAttendance) {
-          attendance[record.studentId] =
-              record.status == 'PRESENT';
+          final isPresent = record.status.toUpperCase() == 'PRESENT';
+
+          attendance[record.studentId] = isPresent;
+
+          // Save original state so we can detect
+          // whether teacher actually changed anything.
+          originalAttendance[record.studentId] = isPresent;
         }
       });
 
@@ -258,18 +270,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         '${widget.sectionName}',
       );
 
-      debugPrint(
-        '========================================',
-      );
+      debugPrint('========================================');
     } catch (e) {
-      debugPrint(
-        'Error loading today attendance: $e',
-      );
+      debugPrint('Error loading today attendance: $e');
 
-      // Attendance may not have been marked yet.
-      //
-      // Do NOT block the screen.
-      existingAttendance = [];
+      if (!mounted) return;
+
+      setState(() {
+        existingAttendance = [];
+        attendanceMarkedToday = false;
+        attendanceChanged = false;
+        originalAttendance.clear();
+      });
     }
   }
 
@@ -280,11 +292,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   Future<void> _saveAttendance() async {
     if (students.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'No students found for this section.',
-          ),
-        ),
+        const SnackBar(content: Text('No students found for this section.')),
       );
 
       return;
@@ -301,16 +309,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
       final teacherId = widget.teacherId;
 
-      final today =
-          DateTime.now().toIso8601String().split('T').first;
+      final today = DateTime.now().toIso8601String().split('T').first;
 
       // ========================================================
       // EXISTING RECORDS
       // ========================================================
 
       final Map<int, AttendanceModel> existingByStudent = {
-        for (final record in existingAttendance)
-          record.studentId: record,
+        for (final record in existingAttendance) record.studentId: record,
       };
 
       // ========================================================
@@ -330,14 +336,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       // ========================================================
 
       for (final student in students) {
-        final isPresent =
-            attendance[student.id] ?? true;
+        final isPresent = attendance[student.id] ?? true;
 
-        final status =
-            isPresent ? 'PRESENT' : 'ABSENT';
+        final status = isPresent ? 'PRESENT' : 'ABSENT';
 
-        final existing =
-            existingByStudent[student.id];
+        final existing = existingByStudent[student.id];
 
         // ------------------------------------------------------
         // NEW RECORD
@@ -350,11 +353,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             'remarks': '',
           });
         }
-
         // ------------------------------------------------------
         // UPDATE EXISTING RECORD
         // ------------------------------------------------------
-
         else if (existing.status != status) {
           recordsToUpdate.add(
             AttendanceModel(
@@ -370,38 +371,24 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         }
       }
 
-      debugPrint(
-        '========================================',
-      );
+      debugPrint('========================================');
 
-      debugPrint(
-        'Saving attendance',
-      );
+      debugPrint('Saving attendance');
 
-      debugPrint(
-        'Class ID: ${widget.classId}',
-      );
+      debugPrint('Class ID: ${widget.classId}');
 
-      debugPrint(
-        'Section ID: ${widget.sectionId}',
-      );
+      debugPrint('Section ID: ${widget.sectionId}');
 
-      debugPrint(
-        'Section Name: ${widget.sectionName}',
-      );
+      debugPrint('Section Name: ${widget.sectionName}');
 
-      debugPrint(
-        'New records: ${newRecords.length}',
-      );
+      debugPrint('New records: ${newRecords.length}');
 
       debugPrint(
         'Records to update: '
         '${recordsToUpdate.length}',
       );
 
-      debugPrint(
-        '========================================',
-      );
+      debugPrint('========================================');
 
       // ========================================================
       // BULK CREATE
@@ -437,31 +424,112 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       // RELOAD
       // ========================================================
 
+      attendanceMarkedToday = true;
+      attendanceChanged = false;
+
       await _loadTodayAttendance();
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Section ${widget.sectionName} attendance '
-            'marked successfully.',
-          ),
-          backgroundColor: Colors.green,
-        ),
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(22),
+            ),
+
+            contentPadding: const EdgeInsets.fromLTRB(24, 28, 24, 22),
+
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 70,
+                  height: 70,
+
+                  decoration: BoxDecoration(
+                    color: const Color(0xffE8F5E9),
+                    shape: BoxShape.circle,
+                  ),
+
+                  child: const Icon(
+                    Icons.check_circle_rounded,
+                    color: Colors.green,
+                    size: 48,
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+
+                Text(
+                  'Attendance Saved!',
+                  textAlign: TextAlign.center,
+
+                  style: GoogleFonts.poppins(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xff172033),
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                Text(
+                  'Section ${widget.sectionName} attendance '
+                  'has been marked successfully.',
+                  textAlign: TextAlign.center,
+
+                  style: GoogleFonts.poppins(
+                    fontSize: 12.5,
+                    color: Colors.grey.shade600,
+                    height: 1.5,
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 45,
+
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xff1565C0),
+
+                      foregroundColor: Colors.white,
+
+                      elevation: 0,
+
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+
+                    child: Text(
+                      'Done',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       );
     } catch (e) {
-      debugPrint(
-        'Save attendance error: $e',
-      );
+      debugPrint('Save attendance error: $e');
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Failed to save attendance: $e',
-          ),
+          content: Text('Failed to save attendance: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -481,14 +549,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   @override
   Widget build(BuildContext context) {
     final presentCount = students
-        .where(
-          (student) =>
-              attendance[student.id] == true,
-        )
+        .where((student) => attendance[student.id] == true)
         .length;
 
-    final absentCount =
-        students.length - presentCount;
+    final absentCount = students.length - presentCount;
 
     return Scaffold(
       backgroundColor: const Color(0xffF5F8FC),
@@ -510,16 +574,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
       body: isLoading
           ? const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xff1565C0),
-              ),
+              child: CircularProgressIndicator(color: Color(0xff1565C0)),
             )
           : errorMessage != null
-              ? _buildError()
-              : _buildAttendance(
-                  presentCount,
-                  absentCount,
-                ),
+          ? _buildError()
+          : _buildAttendance(presentCount, absentCount),
     );
   }
 
@@ -533,8 +592,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         padding: const EdgeInsets.all(24),
 
         child: Column(
-          mainAxisAlignment:
-              MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
 
           children: [
             const Icon(
@@ -558,10 +616,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             Text(
               errorMessage ?? 'Something went wrong.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                color: Colors.grey,
-              ),
+              style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
             ),
 
             const SizedBox(height: 20),
@@ -569,8 +624,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ElevatedButton(
               onPressed: _loadStudents,
               style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    const Color(0xff1565C0),
+                backgroundColor: const Color(0xff1565C0),
                 foregroundColor: Colors.white,
               ),
               child: const Text('Retry'),
@@ -585,10 +639,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   // ATTENDANCE UI
   // ============================================================
 
-  Widget _buildAttendance(
-    int presentCount,
-    int absentCount,
-  ) {
+  Widget _buildAttendance(int presentCount, int absentCount) {
     return Column(
       children: [
         // ========================================================
@@ -598,19 +649,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         Container(
           width: double.infinity,
 
-          margin: const EdgeInsets.fromLTRB(
-            14,
-            14,
-            14,
-            8,
-          ),
+          margin: const EdgeInsets.fromLTRB(14, 14, 14, 8),
 
           padding: const EdgeInsets.all(14),
 
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius:
-                BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(16),
 
             boxShadow: const [
               BoxShadow(
@@ -622,8 +667,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           ),
 
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
 
             children: [
               // ==================================================
@@ -638,8 +682,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
                     decoration: BoxDecoration(
                       color: const Color(0xffE3F2FD),
-                      borderRadius:
-                          BorderRadius.circular(11),
+                      borderRadius: BorderRadius.circular(11),
                     ),
 
                     child: const Icon(
@@ -653,21 +696,17 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
                   Expanded(
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
 
                       children: [
                         Text(
                           widget.className,
                           maxLines: 1,
-                          overflow:
-                              TextOverflow.ellipsis,
+                          overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.poppins(
                             fontSize: 15,
-                            fontWeight:
-                                FontWeight.w700,
-                            color:
-                                const Color(0xff1565C0),
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xff1565C0),
                           ),
                         ),
 
@@ -685,13 +724,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
                             Text(
                               'Section ${widget.sectionName}',
-                              style:
-                                  GoogleFonts.poppins(
+                              style: GoogleFonts.poppins(
                                 fontSize: 11,
-                                color:
-                                    Colors.grey.shade700,
-                                fontWeight:
-                                    FontWeight.w500,
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
@@ -702,26 +738,22 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
                   // STUDENT COUNT
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(
+                    padding: const EdgeInsets.symmetric(
                       horizontal: 9,
                       vertical: 6,
                     ),
 
                     decoration: BoxDecoration(
                       color: const Color(0xffF5F8FC),
-                      borderRadius:
-                          BorderRadius.circular(9),
+                      borderRadius: BorderRadius.circular(9),
                     ),
 
                     child: Text(
                       '${students.length} Students',
                       style: GoogleFonts.poppins(
                         fontSize: 10,
-                        fontWeight:
-                            FontWeight.w600,
-                        color:
-                            Colors.grey.shade700,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
                       ),
                     ),
                   ),
@@ -730,16 +762,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
               const SizedBox(height: 14),
 
-              const Divider(
-                height: 1,
-              ),
+              const Divider(height: 1),
 
               const SizedBox(height: 11),
 
               // ==================================================
               // DATE + COUNTS
               // ==================================================
-
               Row(
                 children: [
                   Expanded(
@@ -757,27 +786,19 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                           _todayDate(),
                           style: GoogleFonts.poppins(
                             fontSize: 11,
-                            color:
-                                Colors.grey.shade700,
-                            fontWeight:
-                                FontWeight.w500,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
                     ),
                   ),
 
-                  _countBadge(
-                    '$presentCount Present',
-                    Colors.green,
-                  ),
+                  _countBadge('$presentCount Present', Colors.green),
 
                   const SizedBox(width: 6),
 
-                  _countBadge(
-                    '$absentCount Absent',
-                    Colors.red,
-                  ),
+                  _countBadge('$absentCount Absent', Colors.red),
                 ],
               ),
             ],
@@ -787,14 +808,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         // ========================================================
         // SMALL HEADER
         // ========================================================
-
         Padding(
-          padding: const EdgeInsets.fromLTRB(
-            18,
-            4,
-            18,
-            8,
-          ),
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 8),
 
           child: Row(
             children: [
@@ -835,13 +850,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         // ========================================================
         // STUDENTS
         // ========================================================
-
         Expanded(
           child: students.isEmpty
               ? Center(
                   child: Column(
-                    mainAxisAlignment:
-                        MainAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
                         Icons.people_outline_rounded,
@@ -855,8 +868,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                         'No students found',
                         style: GoogleFonts.poppins(
                           color: Colors.grey,
-                          fontWeight:
-                              FontWeight.w500,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
 
@@ -865,12 +877,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       Text(
                         'No students are assigned to '
                         'Section ${widget.sectionName}.',
-                        textAlign:
-                            TextAlign.center,
+                        textAlign: TextAlign.center,
                         style: GoogleFonts.poppins(
                           fontSize: 11,
-                          color:
-                              Colors.grey.shade500,
+                          color: Colors.grey.shade500,
                         ),
                       ),
                     ],
@@ -881,31 +891,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   onRefresh: _loadStudents,
 
                   child: ListView.builder(
-                    padding:
-                        const EdgeInsets.fromLTRB(
-                      14,
-                      0,
-                      14,
-                      14,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
 
-                    itemCount:
-                        students.length,
+                    itemCount: students.length,
 
-                    itemBuilder:
-                        (context, index) {
-                      final student =
-                          students[index];
+                    itemBuilder: (context, index) {
+                      final student = students[index];
 
-                      final isPresent =
-                          attendance[
-                                  student.id] ??
-                              true;
+                      final isPresent = attendance[student.id] ?? true;
 
-                      return _buildStudentRow(
-                        student,
-                        isPresent,
-                      );
+                      return _buildStudentRow(student, isPresent);
                     },
                   ),
                 ),
@@ -914,113 +909,107 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         // ========================================================
         // MARK ATTENDANCE BUTTON
         // ========================================================
+        // ========================================================
+        // MARK ATTENDANCE BUTTON
+        // ========================================================
+        if (!attendanceMarkedToday || attendanceChanged)
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
 
-        Container(
-          padding: const EdgeInsets.fromLTRB(
-            14,
-            10,
-            14,
-            14,
-          ),
+            color: Colors.white,
 
-          color: Colors.white,
+            child: SizedBox(
+              width: double.infinity,
+              height: 50,
 
-          child: SizedBox(
-            width: double.infinity,
-            height: 50,
+              child: ElevatedButton(
+                onPressed: isSaving ? null : _saveAttendance,
 
-            child: ElevatedButton(
-              onPressed:
-                  isSaving
-                      ? null
-                      : _saveAttendance,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xff1565C0),
 
-              style:
-                  ElevatedButton.styleFrom(
-                backgroundColor:
-                    const Color(0xff1565C0),
+                  disabledBackgroundColor: Colors.grey.shade400,
 
-                disabledBackgroundColor:
-                    Colors.grey.shade400,
+                  elevation: 0,
 
-                elevation: 0,
-
-                shape:
-                    RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(13),
+                  ),
                 ),
-              ),
 
-              child: isSaving
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
+                child: isSaving
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
 
-                      child:
-                          CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : Row(
-                      mainAxisAlignment:
-                          MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.check_circle_outline,
+                        child: CircularProgressIndicator(
                           color: Colors.white,
-                          size: 20,
+                          strokeWidth: 2,
                         ),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
 
-                        const SizedBox(width: 8),
-
-                        Text(
-                          'Mark Attendance',
-                          style:
-                              GoogleFonts.poppins(
+                        children: [
+                          const Icon(
+                            Icons.check_circle_outline,
                             color: Colors.white,
-                            fontSize: 15,
-                            fontWeight:
-                                FontWeight.w600,
+                            size: 20,
                           ),
-                        ),
-                      ],
-                    ),
+
+                          const SizedBox(width: 8),
+
+                          Text(
+                            'Mark Attendance',
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
             ),
           ),
-        ),
       ],
     );
   }
 
+  void _checkAttendanceChanged() {
+    bool changed = false;
+
+    for (final student in students) {
+      final current = attendance[student.id] ?? true;
+
+      final original = originalAttendance[student.id] ?? true;
+
+      if (current != original) {
+        changed = true;
+        break;
+      }
+    }
+
+    setState(() {
+      attendanceChanged = changed;
+    });
+  }
   // ============================================================
   // STUDENT ROW
   // ============================================================
 
-  Widget _buildStudentRow(
-    StudentModel student,
-    bool isPresent,
-  ) {
+  Widget _buildStudentRow(StudentModel student, bool isPresent) {
     return Container(
-      margin: const EdgeInsets.only(
-        bottom: 7,
-      ),
+      margin: const EdgeInsets.only(bottom: 7),
 
-      padding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 8,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
 
       decoration: BoxDecoration(
         color: Colors.white,
 
-        borderRadius:
-            BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(12),
 
-        border: Border.all(
-          color: Colors.grey.shade200,
-        ),
+        border: Border.all(color: Colors.grey.shade200),
       ),
 
       child: Row(
@@ -1038,21 +1027,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             decoration: BoxDecoration(
               color: const Color(0xffE3F2FD),
 
-              borderRadius:
-                  BorderRadius.circular(9),
+              borderRadius: BorderRadius.circular(9),
             ),
 
             child: Text(
-              student.rollNumber.isNotEmpty
-                  ? student.rollNumber
-                  : '-',
+              student.rollNumber.isNotEmpty ? student.rollNumber : '-',
 
               style: GoogleFonts.poppins(
-                color:
-                    const Color(0xff1565C0),
+                color: const Color(0xff1565C0),
                 fontSize: 12,
-                fontWeight:
-                    FontWeight.bold,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
@@ -1062,11 +1046,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           // ======================================================
           // NAME
           // ======================================================
-
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
 
               children: [
                 Text(
@@ -1074,13 +1056,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
                   maxLines: 1,
 
-                  overflow:
-                      TextOverflow.ellipsis,
+                  overflow: TextOverflow.ellipsis,
 
                   style: GoogleFonts.poppins(
                     fontSize: 13,
-                    fontWeight:
-                        FontWeight.w600,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
 
@@ -1102,23 +1082,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           // ======================================================
           // ON / OFF
           // ======================================================
-
           Row(
-            mainAxisSize:
-                MainAxisSize.min,
+            mainAxisSize: MainAxisSize.min,
 
             children: [
               Text(
-                isPresent ? 'ON' : 'OFF',
-
+                isPresent ? 'PRESENT' : 'ABSENT',
                 style: GoogleFonts.poppins(
                   fontSize: 10,
-                  fontWeight:
-                      FontWeight.w600,
-
-                  color: isPresent
-                      ? Colors.green
-                      : Colors.red,
+                  fontWeight: FontWeight.w700,
+                  color: isPresent ? Colors.green : Colors.red,
                 ),
               ),
 
@@ -1129,18 +1102,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
                 onChanged: (value) {
                   setState(() {
-                    attendance[
-                            student.id] =
-                        value;
+                    attendance[student.id] = value;
                   });
+
+                  _checkAttendanceChanged();
                 },
 
-                activeColor:
-                    const Color(0xff1565C0),
+                activeColor: const Color(0xff1565C0),
 
-                materialTapTargetSize:
-                    MaterialTapTargetSize
-                        .shrinkWrap,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ],
           ),
@@ -1153,21 +1123,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   // COUNT BADGE
   // ============================================================
 
-  Widget _countBadge(
-    String text,
-    Color color,
-  ) {
+  Widget _countBadge(String text, Color color) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 5,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
 
       decoration: BoxDecoration(
         color: color.withOpacity(0.08),
-        borderRadius:
-            BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(8),
       ),
 
       child: Text(
@@ -1175,8 +1137,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         style: GoogleFonts.poppins(
           fontSize: 10,
           color: color,
-          fontWeight:
-              FontWeight.w600,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );

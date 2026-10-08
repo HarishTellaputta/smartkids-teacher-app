@@ -13,6 +13,9 @@ class StudentModel {
   final int sectionId;
   final int parentId;
   final int academicYearId;
+  final String sectionName;
+  final String parentName;
+  final String academicYearName;
   final String status;
 
   StudentModel({
@@ -30,6 +33,9 @@ class StudentModel {
     required this.sectionId,
     required this.parentId,
     required this.academicYearId,
+    required this.sectionName,
+    required this.parentName,
+    required this.academicYearName,
     required this.status,
   });
 
@@ -49,6 +55,9 @@ class StudentModel {
       sectionId: json['sectionId'] ?? 0,
       parentId: json['parentId'] ?? 0,
       academicYearId: json['academicYearId'] ?? 0,
+      sectionName: json['sectionName'] ?? '',
+      parentName: json['parentName'] ?? '',
+      academicYearName: json['academicYearName'] ?? '',
       status: json['status'] ?? '',
     );
   }
@@ -69,6 +78,9 @@ class StudentModel {
       'sectionId': sectionId,
       'parentId': parentId,
       'academicYearId': academicYearId,
+      'sectionName': sectionName,
+      'parentName': parentName,
+      'academicYearName': academicYearName,
       'status': status,
     };
   }

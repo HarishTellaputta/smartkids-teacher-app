@@ -4,14 +4,14 @@ class AuthService {
   final Dio _dio;
 
   AuthService()
-      : _dio = Dio(
-          BaseOptions(
-            baseUrl: 'http://10.24.241.80:8080',
-            connectTimeout: const Duration(seconds: 15),
-            receiveTimeout: const Duration(seconds: 15),
-            headers: {'Content-Type': 'application/json'},
-          ),
-        );
+    : _dio = Dio(
+        BaseOptions(
+          baseUrl: 'http://10.24.241.80:8080',
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 15),
+          headers: {'Content-Type': 'application/json'},
+        ),
+      );
 
   // ================= DEBUG LOG =================
 
@@ -49,10 +49,7 @@ class AuthService {
     try {
       final response = await _dio.post(
         '/auth/login',
-        data: {
-          'username': username,
-          'password': password,
-        },
+        data: {'username': username, 'password': password},
       );
 
       _logResponse(response);
@@ -101,9 +98,9 @@ class AuthService {
 
   // ================= FORGOT PASSWORD =================
 
-  Future<String> forgotPassword({
-    required String email,
-  }) async {
+  // ================= FORGOT PASSWORD =================
+
+  Future<String> forgotPassword({required String email}) async {
     print('======= FORGOT PASSWORD REQUEST =======');
     print('URL   : ${_dio.options.baseUrl}/auth/forgot-password');
     print('EMAIL : $email');
@@ -112,20 +109,33 @@ class AuthService {
     try {
       final response = await _dio.post(
         '/auth/forgot-password',
-        data: {
-          'email': email,
-        },
+        data: {'email': email},
       );
 
       _logResponse(response);
 
-      return response.data.toString();
+      final responseText = response.data.toString().trim();
+
+      const prefix = 'Password reset token generated:';
+
+      String resetToken;
+
+      if (responseText.startsWith(prefix)) {
+        resetToken = responseText.substring(prefix.length).trim();
+      } else {
+        resetToken = responseText;
+      }
+
+      print('========== RESET TOKEN ==========');
+      print('TOKEN : $resetToken');
+      print('=================================');
+
+      return resetToken;
     } on DioException catch (e) {
       _logError(e);
       rethrow;
     }
   }
-
   // ================= RESET PASSWORD =================
 
   Future<String> resetPassword({
@@ -176,11 +186,7 @@ class AuthService {
           'newPassword': newPassword,
           'confirmPassword': confirmPassword,
         },
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $jwtToken',
-          },
-        ),
+        options: Options(headers: {'Authorization': 'Bearer $jwtToken'}),
       );
 
       _logResponse(response);
@@ -194,9 +200,7 @@ class AuthService {
 
   // ================= LOGOUT =================
 
-  Future<String> logout({
-    required String jwtToken,
-  }) async {
+  Future<String> logout({required String jwtToken}) async {
     print('========== LOGOUT REQUEST ==========');
     print('URL : ${_dio.options.baseUrl}/auth/logout');
     print('====================================');
@@ -204,11 +208,7 @@ class AuthService {
     try {
       final response = await _dio.post(
         '/auth/logout',
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $jwtToken',
-          },
-        ),
+        options: Options(headers: {'Authorization': 'Bearer $jwtToken'}),
       );
 
       _logResponse(response);
@@ -219,6 +219,4 @@ class AuthService {
       rethrow;
     }
   }
-
- 
 }

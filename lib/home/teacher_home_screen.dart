@@ -15,6 +15,14 @@ import 'package:teacher_app/services/student_birthday_status_service.dart';
 import 'package:teacher_app/teacher/teacher_notices_screen.dart';
 import 'package:teacher_app/teacher/teacher_performance_screen.dart';
 import 'package:teacher_app/teacher/teacher_leave_request_screen.dart';
+import 'package:teacher_app/teacher/birthday_chat_screen.dart';
+import 'package:teacher_app/teacher/birthday_status_screen.dart';
+import 'package:teacher_app/services/birthday_chat_service.dart';
+import 'package:teacher_app/models/student_birthday_chat_model.dart';
+import 'package:teacher_app/models/birthday_chat_message_model.dart';
+import 'package:teacher_app/services/birthday_service.dart';
+import 'package:teacher_app/models/student_model.dart';
+import 'package:teacher_app/services/student_service.dart';
 
 class TeacherHomeScreen extends StatefulWidget {
   const TeacherHomeScreen({super.key});
@@ -67,10 +75,33 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
     }
 
     if (_selectedIndex == 2) {
-      return const LeaveRequestScreen();
+      // return const LeaveRequestScreen();
+      return _buildComingSoon();
     }
 
     return _buildHome();
+  }
+
+  Widget _buildComingSoon() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.construction_rounded, size: 70, color: Colors.orange),
+          SizedBox(height: 16),
+          Text(
+            'Coming Soon',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Leave Request feature will be available soon.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 15, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
   }
 
   // ============================================================
@@ -79,6 +110,8 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
 
   Future<void> _loadTodayBirthdays() async {
     try {
+      debugPrint('🎂 BIRTHDAY: Loading started');
+
       if (mounted) {
         setState(() {
           isLoadingBirthdays = true;
@@ -87,7 +120,13 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
 
       final token = await AuthStorage.getToken();
 
+      debugPrint(
+        '🎂 BIRTHDAY: Token exists = ${token != null && token.isNotEmpty}',
+      );
+
       if (token == null || token.isEmpty) {
+        debugPrint('❌ BIRTHDAY: Token missing');
+
         if (!mounted) return;
 
         setState(() {
@@ -100,7 +139,20 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
 
       final service = StudentBirthdayStatusService(token);
 
+      debugPrint('🎂 BIRTHDAY: Calling getTodayBirthdays()');
+
       final birthdays = await service.getTodayBirthdays();
+
+      debugPrint('🎂 BIRTHDAY: API returned ${birthdays.length} students');
+
+      for (final birthday in birthdays) {
+        debugPrint(
+          '🎂 BIRTHDAY STUDENT: '
+          '${birthday.studentName} | '
+          '${birthday.className} | '
+          '${birthday.section}',
+        );
+      }
 
       if (!mounted) return;
 
@@ -108,8 +160,11 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
         todayBirthdays = birthdays;
         isLoadingBirthdays = false;
       });
-    } catch (e) {
-      debugPrint('TODAY BIRTHDAYS ERROR: $e');
+
+      debugPrint('✅ BIRTHDAY: UI updated');
+    } catch (e, stackTrace) {
+      debugPrint('❌ TODAY BIRTHDAYS ERROR: $e');
+      debugPrint('❌ STACK TRACE: $stackTrace');
 
       if (!mounted) return;
 
@@ -341,26 +396,34 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
       ),
     );
   }
+  // ============================================================
+  // BIRTHDAY STATUS - WHATSAPP STYLE
+  // ============================================================
 
   Widget _buildBirthdayStatus() {
     if (isLoadingBirthdays) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xffE8EDF4)),
-        ),
-        child: const Center(
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.5,
-              color: primaryColor,
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildSectionTitle(
+              title: 'Birthday Status 🎂',
+              subtitle: 'Checking birthdays today...',
             ),
-          ),
+            const SizedBox(height: 14),
+            const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: primaryColor,
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -372,104 +435,188 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle(
-          title: 'Birthday Status 🎂',
-          subtitle: 'Students celebrating today',
+        Row(
+          children: [
+            Expanded(
+              child: _buildSectionTitle(
+                title: 'Birthday Status 🎂',
+                subtitle: 'Students celebrating today',
+              ),
+            ),
+
+            TextButton(
+              onPressed: () {
+                // Open complete birthday status/chat screen
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const BirthdayStatusScreen(),
+                  ),
+                );
+              },
+              child: Text(
+                'View All',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: primaryColor,
+                ),
+              ),
+            ),
+          ],
         ),
 
         const SizedBox(height: 14),
 
-        ...todayBirthdays.map((birthday) => _birthdayCard(birthday)),
+        SizedBox(
+          height: 112,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            itemCount: todayBirthdays.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 16),
+            itemBuilder: (context, index) {
+              final birthday = todayBirthdays[index];
+
+              return _birthdayStatusItem(birthday);
+            },
+          ),
+        ),
       ],
     );
   }
 
-  Widget _birthdayCard(StudentBirthdayStatusModel birthday) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xffE8EDF4)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: const Color(0xfffff3e0),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(
-              Icons.cake_rounded,
-              color: Color(0xffF57C00),
-              size: 27,
+  Widget _birthdayStatusItem(StudentBirthdayStatusModel birthday) {
+    final studentName = birthday.studentName?.trim().isNotEmpty == true
+        ? birthday.studentName!.trim()
+        : 'Student';
+
+    final initials = _getInitials(studentName);
+
+    return GestureDetector(
+      onTap: () {
+        final studentId = birthday.studentId;
+
+        if (studentId == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Student ID is not available.')),
+          );
+          return;
+        }
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => BirthdayChatScreen(
+              studentId: studentId,
+              studentName: studentName,
             ),
           ),
+        );
+      },
+      child: SizedBox(
+        width: 78,
+        child: Column(
+          children: [
+            // ========================================================
+            // STATUS CIRCLE
+            // ========================================================
 
-          const SizedBox(width: 14),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  birthday.studentName ?? 'Student',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xff172033),
+            Container(
+              width: 68,
+              height: 68,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xff1565C0),
+                    Color(0xff42A5F5),
+                    Color(0xff90CAF9),
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: primaryColor.withOpacity(0.18),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: CircleAvatar(
+                  backgroundColor: const Color(0xffE3F2FD),
+                  child: Text(
+                    initials,
+                    style: GoogleFonts.poppins(
+                      color: primaryColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-
-                const SizedBox(height: 3),
-
-                Text(
-                  [
-                    if (birthday.className != null) birthday.className!,
-                    if (birthday.section != null) 'Section ${birthday.section}',
-                  ].join(' • '),
-                  style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-            decoration: BoxDecoration(
-              color: const Color(0xfffff3e0),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              '🎉 Birthday',
-              style: GoogleFonts.poppins(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xffEF6C00),
               ),
             ),
-          ),
-        ],
+
+            const SizedBox(height: 7),
+
+            // ========================================================
+            // NAME
+            // ========================================================
+            Text(
+              studentName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xff172033),
+              ),
+            ),
+
+            const SizedBox(height: 1),
+
+            Text(
+              '🎂 Today',
+              style: GoogleFonts.poppins(
+                fontSize: 9,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
-  // ============================================================
+
+  String _getInitials(String name) {
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    if (parts.isEmpty) {
+      return 'S';
+    }
+
+    if (parts.length == 1) {
+      return parts.first
+          .substring(0, parts.first.length >= 2 ? 2 : 1)
+          .toUpperCase();
+    }
+
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  } // ============================================================
   // SECTION TITLE
   // ============================================================
 
