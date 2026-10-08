@@ -173,9 +173,9 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
             _buildAdmissionInformation(),
 
-            const SizedBox(height: 18),
+            // const SizedBox(height: 18),
 
-            _buildAddressCard(),
+            // _buildAddressCard(),
 
             const SizedBox(height: 18),
 
@@ -374,16 +374,16 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
         _infoRow(
           icon: Icons.grid_view_rounded,
-          label: 'Section ID',
-          value: s.sectionId.toString(),
+          label: 'Section',
+          value: s.sectionName.isEmpty ? 'Not assigned' : s.sectionName,
         ),
 
         _divider(),
 
         _infoRow(
           icon: Icons.calendar_month_rounded,
-          label: 'Academic Year ID',
-          value: s.academicYearId.toString(),
+          label: 'Academic Year',
+          value: s.academicYearName.isEmpty ? 'Not assigned' : s.academicYearName,
         ),
       ],
     );
@@ -485,8 +485,8 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
         _infoRow(
           icon: Icons.family_restroom_rounded,
-          label: 'Parent ID',
-          value: s.parentId.toString(),
+          label: 'Parent Name',
+          value: s.parentName.isEmpty ? 'Not assigned' : s.parentName,
         ),
       ],
     );
@@ -496,57 +496,57 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   // ADDRESS
   // ============================================================
 
-  Widget _buildAddressCard() {
-    final s = student!;
+  // Widget _buildAddressCard() {
+  //   final s = student!;
 
-    return _sectionCard(
-      title: 'Address',
-      icon: Icons.location_on_rounded,
+  //   return _sectionCard(
+  //     title: 'Address',
+  //     icon: Icons.location_on_rounded,
 
-      children: [
-        Container(
-          width: double.infinity,
+  //     children: [
+  //       Container(
+  //         width: double.infinity,
 
-          padding: const EdgeInsets.all(15),
+  //         padding: const EdgeInsets.all(15),
 
-          decoration: BoxDecoration(
-            color: const Color(0xffF7F9FC),
-            borderRadius: BorderRadius.circular(15),
-          ),
+  //         decoration: BoxDecoration(
+  //           color: const Color(0xffF7F9FC),
+  //           borderRadius: BorderRadius.circular(15),
+  //         ),
 
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  //         child: Row(
+  //           crossAxisAlignment: CrossAxisAlignment.start,
 
-            children: [
-              const Icon(
-                Icons.location_on_outlined,
-                color: primaryColor,
-                size: 21,
-              ),
+  //           children: [
+  //             const Icon(
+  //               Icons.location_on_outlined,
+  //               color: primaryColor,
+  //               size: 21,
+  //             ),
 
-              const SizedBox(width: 10),
+  //             const SizedBox(width: 10),
 
-              Expanded(
-                child: Text(
-                  _display(
-                    s.address,
-                    fallback: 'Address not available',
-                  ),
+  //             Expanded(
+  //               child: Text(
+  //                 _display(
+  //                   s.address,
+  //                   fallback: 'Address not available',
+  //                 ),
 
-                  style: GoogleFonts.poppins(
-                    color: textColor,
-                    fontSize: 13,
-                    height: 1.5,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  //                 style: GoogleFonts.poppins(
+  //                   color: textColor,
+  //                   fontSize: 13,
+  //                   height: 1.5,
+  //                   fontWeight: FontWeight.w500,
+  //                 ),
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
 
   // ============================================================
   // STATUS

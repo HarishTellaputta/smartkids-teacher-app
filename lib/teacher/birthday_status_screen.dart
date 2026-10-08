@@ -1,101 +1,208 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/student_birthday_status_model.dart';
+import '../services/student_birthday_status_service.dart';
+import 'birthday_chat_screen.dart';
 
 class BirthdayStatusScreen extends StatefulWidget {
   const BirthdayStatusScreen({super.key});
 
   @override
-  State<BirthdayStatusScreen> createState() => _BirthdayStatusScreenState();
+  State<BirthdayStatusScreen> createState() =>
+      _BirthdayStatusScreenState();
 }
 
-class _BirthdayStatusScreenState extends State<BirthdayStatusScreen> {
-  static const Color primaryColor = Color(0xff1565C0);
-  static const Color backgroundColor = Color(0xffF5F8FC);
+class _BirthdayStatusScreenState
+    extends State<BirthdayStatusScreen> {
+  static const Color primaryColor =
+      Color(0xff1565C0);
 
-  bool isLoading = false;
+  static const Color backgroundColor =
+      Color(0xffF5F8FC);
 
-  // Dummy data for now.
-  // Later this will come from:
-  // GET /api/v1/student-birthday-status/today
-  final List<Map<String, dynamic>> birthdays = [
-    {
-      'name': 'Rahul Kumar',
-      'class': 'Class 5',
-      'section': 'A',
-      'age': 10,
-      'initials': 'RK',
-    },
-    {
-      'name': 'Ananya Reddy',
-      'class': 'Class 7',
-      'section': 'B',
-      'age': 12,
-      'initials': 'AR',
-    },
-  ];
+  List<StudentBirthdayStatusModel>
+      birthdays = [];
+
+  bool isLoading = true;
 
   @override
-  Widget build(BuildContext context) {
+  void initState() {
+    super.initState();
+
+    _loadBirthdays();
+  }
+
+  // =========================================================
+  // LOAD
+  // =========================================================
+
+  Future<void> _loadBirthdays() async {
+    try {
+      final prefs =
+          await SharedPreferences
+              .getInstance();
+
+      final token =
+          prefs.getString(
+        'jwt_token',
+      );
+
+      if (token == null ||
+          token.isEmpty) {
+        setState(() {
+          isLoading = false;
+        });
+
+        return;
+      }
+
+      final service =
+          StudentBirthdayStatusService(
+        token,
+      );
+
+      final result =
+          await service
+              .getTodayBirthdays();
+
+      if (!mounted) return;
+
+      setState(() {
+        birthdays = result;
+        isLoading = false;
+      });
+    } catch (e) {
+      debugPrint(
+        'Birthday status error: $e',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  // =========================================================
+  // OPEN CHAT
+  // =========================================================
+
+  void _openChat(
+    StudentBirthdayStatusModel birthday,
+  ) {
+    if (birthday.studentId == null) {
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            BirthdayChatScreen(
+          studentId:
+              birthday.studentId!,
+          studentName:
+              birthday.studentName ??
+                  'Student',
+          className:
+              birthday.className,
+          section:
+              birthday.section,
+        ),
+      ),
+    );
+  }
+
+  // =========================================================
+  // BUILD
+  // =========================================================
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
-      backgroundColor: backgroundColor,
+      backgroundColor:
+          backgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
+        backgroundColor:
+            Colors.white,
+        surfaceTintColor:
+            Colors.white,
         leading: IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: Color(0xff172033),
+          onPressed: () =>
+              Navigator.pop(
+            context,
+          ),
+          icon:
+              const Icon(
+            Icons
+                .arrow_back_ios_new_rounded,
+            color:
+                Color(0xff172033),
             size: 20,
           ),
         ),
         title: Text(
           'Birthday Status',
-          style: GoogleFonts.poppins(
-            color: const Color(0xff172033),
+          style:
+              GoogleFonts.poppins(
+            color:
+                const Color(
+              0xff172033,
+            ),
             fontSize: 18,
-            fontWeight: FontWeight.w700,
+            fontWeight:
+                FontWeight.w700,
           ),
         ),
         centerTitle: true,
       ),
-      body: RefreshIndicator(
-        color: primaryColor,
-        onRefresh: _refreshBirthdayStatus,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 30),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      body:
+          RefreshIndicator(
+        color:
+            primaryColor,
+        onRefresh:
+            _loadBirthdays,
+        child:
+            SingleChildScrollView(
+          physics:
+              const AlwaysScrollableScrollPhysics(),
+          padding:
+              const EdgeInsets.fromLTRB(
+            16,
+            18,
+            16,
+            30,
+          ),
+          child:
+              Column(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
             children: [
-              _buildBirthdayHeader(),
+              _buildHeader(),
 
-              const SizedBox(height: 22),
+              const SizedBox(
+                height: 22,
+              ),
 
-              _buildQuickStatus(),
+              _buildStatusSection(),
 
-              const SizedBox(height: 26),
+              const SizedBox(
+                height: 26,
+              ),
 
-              _buildSectionHeader(),
+              _buildChatInfo(),
 
-              const SizedBox(height: 14),
+              const SizedBox(
+                height: 18,
+              ),
 
-              if (isLoading)
-                _buildLoadingState()
-              else if (birthdays.isEmpty)
-                _buildEmptyState()
-              else
-                ...birthdays.map(
-                  (birthday) => Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: _buildBirthdayCard(birthday),
-                  ),
-                ),
-
-              const SizedBox(height: 12),
-
-              _buildChatBanner(),
+              _buildTip(),
             ],
           ),
         ),
@@ -107,198 +214,89 @@ class _BirthdayStatusScreenState extends State<BirthdayStatusScreen> {
   // HEADER
   // =========================================================
 
-  Widget _buildBirthdayHeader() {
+  Widget _buildHeader() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+      width:
+          double.infinity,
+      padding:
+          const EdgeInsets.all(
+        21,
+      ),
+      decoration:
+          BoxDecoration(
+        gradient:
+            const LinearGradient(
           colors: [
             Color(0xff1565C0),
             Color(0xff42A5F5),
           ],
         ),
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: [
-          BoxShadow(
-            color: primaryColor.withOpacity(0.20),
-            blurRadius: 22,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            right: -12,
-            top: -15,
-            child: Container(
-              width: 95,
-              height: 95,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          Positioned(
-            right: 25,
-            bottom: -35,
-            child: Container(
-              width: 85,
-              height: 85,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          Row(
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.16),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.20),
-                  ),
-                ),
-                child: const Center(
-                  child: Text(
-                    '🎂',
-                    style: TextStyle(fontSize: 32),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Today’s Birthdays',
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 19,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      birthdays.isEmpty
-                          ? 'No birthdays today'
-                          : '${birthdays.length} students celebrating today',
-                      style: GoogleFonts.poppins(
-                        color: Colors.white.withOpacity(0.82),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // =========================================================
-  // QUICK STATUS
-  // =========================================================
-
-  Widget _buildQuickStatus() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildStatusCard(
-            icon: Icons.cake_rounded,
-            title: '${birthdays.length}',
-            subtitle: 'Birthdays',
-            iconBackground: const Color(0xffFFF1E8),
-            iconColor: const Color(0xffF97316),
-          ),
+        borderRadius:
+            BorderRadius.circular(
+          25,
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildStatusCard(
-            icon: Icons.chat_bubble_rounded,
-            title: 'Chat',
-            subtitle: 'Birthday Chat',
-            iconBackground: const Color(0xffE8F1FF),
-            iconColor: primaryColor,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatusCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color iconBackground,
-    required Color iconColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: const Color(0xffE8EDF4),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.025),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
-          ),
-        ],
       ),
       child: Row(
         children: [
           Container(
-            width: 45,
-            height: 45,
-            decoration: BoxDecoration(
-              color: iconBackground,
-              borderRadius: BorderRadius.circular(14),
+            width: 60,
+            height: 60,
+            decoration:
+                BoxDecoration(
+              color: Colors
+                  .white
+                  .withOpacity(
+                0.14,
+              ),
+              shape:
+                  BoxShape.circle,
             ),
-            child: Icon(
-              icon,
-              color: iconColor,
-              size: 23,
+            child:
+                const Center(
+              child: Text(
+                '🎂',
+                style:
+                    TextStyle(
+                  fontSize: 31,
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 11),
+          const SizedBox(
+            width: 15,
+          ),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child:
+                Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xff172033),
+                  'Today’s Birthdays',
+                  style:
+                      GoogleFonts.poppins(
+                    color:
+                        Colors.white,
+                    fontSize: 18,
+                    fontWeight:
+                        FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(
+                  height: 4,
+                ),
                 Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(
+                  birthdays.isEmpty
+                      ? 'No birthdays today'
+                      : '${birthdays.length} students celebrating today',
+                  style:
+                      GoogleFonts.poppins(
+                    color: Colors
+                        .white
+                        .withOpacity(
+                      0.82,
+                    ),
                     fontSize: 10,
-                    color: Colors.grey.shade600,
                   ),
                 ),
               ],
@@ -310,273 +308,243 @@ class _BirthdayStatusScreenState extends State<BirthdayStatusScreen> {
   }
 
   // =========================================================
-  // SECTION HEADER
+  // STATUS SECTION
   // =========================================================
 
-  Widget _buildSectionHeader() {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Celebrations Today',
-                style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xff172033),
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                'Wish your students a happy birthday',
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 11,
-            vertical: 7,
-          ),
-          decoration: BoxDecoration(
-            color: const Color(0xffE8F1FF),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            '${birthdays.length} Today',
-            style: GoogleFonts.poppins(
-              color: primaryColor,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // =========================================================
-  // BIRTHDAY CARD
-  // =========================================================
-
-  Widget _buildBirthdayCard(Map<String, dynamic> birthday) {
-    final String name = birthday['name'] ?? '';
-    final String className = birthday['class'] ?? '';
-    final String section = birthday['section'] ?? '';
-    final int age = birthday['age'] ?? 0;
-    final String initials = birthday['initials'] ?? '';
-
+  Widget _buildStatusSection() {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: const Color(0xffE8EDF4),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.025),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
+      width:
+          double.infinity,
+      padding:
+          const EdgeInsets.fromLTRB(
+        15,
+        18,
+        15,
+        18,
       ),
-      child: Column(
+      decoration:
+          BoxDecoration(
+        color:
+            Colors.white,
+        borderRadius:
+            BorderRadius.circular(
+          22,
+        ),
+        border:
+            Border.all(
+          color:
+              const Color(
+            0xffE6EBF2,
+          ),
+        ),
+      ),
+      child:
+          Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 55,
-                height: 55,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xffE3F2FD),
-                      Color(0xffBBDEFB),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(17),
-                ),
-                child: Center(
-                  child: Text(
-                    initials,
-                    style: GoogleFonts.poppins(
-                      color: primaryColor,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xff172033),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$className • Section $section',
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xffFFF4E8),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Text(
-                      '🎂',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$age',
-                      style: GoogleFonts.poppins(
-                        color: const Color(0xffF97316),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 15),
-
-          Container(
-            height: 1,
-            color: const Color(0xffEEF1F5),
-          ),
-
-          const SizedBox(height: 13),
-
-          SizedBox(
-            width: double.infinity,
-            height: 43,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                _showBirthdayWish(name);
-              },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: primaryColor,
-                side: const BorderSide(
-                  color: Color(0xffD6E5F8),
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(13),
-                ),
-              ),
-              icon: const Icon(
-                Icons.celebration_rounded,
-                size: 18,
-              ),
-              label: Text(
-                'Send Birthday Wish',
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
+          Text(
+            'Birthday Status',
+            style:
+                GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight:
+                  FontWeight.w700,
+              color:
+                  const Color(
+                0xff172033,
               ),
             ),
           ),
+
+          const SizedBox(
+            height: 3,
+          ),
+
+          Text(
+            'Tap a student to open their birthday chat',
+            style:
+                GoogleFonts.poppins(
+              fontSize: 10,
+              color:
+                  Colors.grey.shade600,
+            ),
+          ),
+
+          const SizedBox(
+            height: 18,
+          ),
+
+          if (isLoading)
+            const SizedBox(
+              height: 110,
+              child:
+                  Center(
+                child:
+                    CircularProgressIndicator(
+                  color:
+                      primaryColor,
+                ),
+              ),
+            )
+          else if (birthdays.isEmpty)
+            _buildEmpty()
+          else
+            SizedBox(
+              height: 125,
+              child:
+                  ListView.separated(
+                scrollDirection:
+                    Axis.horizontal,
+                itemCount:
+                    birthdays.length,
+                separatorBuilder:
+                    (_, __) =>
+                        const SizedBox(
+                  width: 17,
+                ),
+                itemBuilder:
+                    (context, index) {
+                  return _buildStatusItem(
+                    birthdays[index],
+                  );
+                },
+              ),
+            ),
         ],
       ),
     );
   }
 
   // =========================================================
-  // CHAT BANNER
+  // WHATSAPP STYLE STATUS ITEM
   // =========================================================
 
-  Widget _buildChatBanner() {
-    return InkWell(
-      borderRadius: BorderRadius.circular(22),
-      onTap: _openBirthdayChat,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [
-              Color(0xff172033),
-              Color(0xff26364F),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: Row(
+  Widget _buildStatusItem(
+    StudentBirthdayStatusModel birthday,
+  ) {
+    return GestureDetector(
+      onTap: () =>
+          _openChat(birthday),
+      child:
+          SizedBox(
+        width: 76,
+        child:
+            Column(
           children: [
             Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(16),
+              width: 70,
+              height: 70,
+              padding:
+                  const EdgeInsets.all(
+                3,
               ),
-              child: const Icon(
-                Icons.forum_rounded,
-                color: Colors.white,
-                size: 25,
+              decoration:
+                  BoxDecoration(
+                shape:
+                    BoxShape.circle,
+                gradient:
+                    const SweepGradient(
+                  colors: [
+                    Color(0xff1565C0),
+                    Color(0xff42A5F5),
+                    Color(0xff64B5F6),
+                    Color(0xff1565C0),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Birthday Chat',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
+              child:
+                  Container(
+                padding:
+                    const EdgeInsets.all(
+                  3,
+                ),
+                decoration:
+                    const BoxDecoration(
+                  color:
+                      Colors.white,
+                  shape:
+                      BoxShape.circle,
+                ),
+                child:
+                    Container(
+                  decoration:
+                      const BoxDecoration(
+                    gradient:
+                        LinearGradient(
+                      colors: [
+                        Color(
+                          0xffE3F2FD,
+                        ),
+                        Color(
+                          0xffBBDEFB,
+                        ),
+                      ],
+                    ),
+                    shape:
+                        BoxShape.circle,
+                  ),
+                  child:
+                      Center(
+                    child:
+                        Text(
+                      _initials(
+                        birthday
+                                .studentName ??
+                            '',
+                      ),
+                      style:
+                          GoogleFonts.poppins(
+                        color:
+                            primaryColor,
+                        fontSize:
+                            17,
+                        fontWeight:
+                            FontWeight.w700,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    'Join the birthday conversations',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white70,
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-            const Icon(
-              Icons.arrow_forward_ios_rounded,
-              color: Colors.white70,
-              size: 16,
+
+            const SizedBox(
+              height: 7,
+            ),
+
+            Text(
+              birthday
+                      .studentName ??
+                  'Student',
+              maxLines: 1,
+              overflow:
+                  TextOverflow.ellipsis,
+              textAlign:
+                  TextAlign.center,
+              style:
+                  GoogleFonts.poppins(
+                fontSize: 10,
+                fontWeight:
+                    FontWeight.w600,
+                color:
+                    const Color(
+                  0xff172033,
+                ),
+              ),
+            ),
+
+            const SizedBox(
+              height: 2,
+            ),
+
+            Text(
+              '🎂 Today',
+              style:
+                  GoogleFonts.poppins(
+                fontSize: 8,
+                color:
+                    Colors.grey.shade500,
+              ),
             ),
           ],
         ),
@@ -585,55 +553,86 @@ class _BirthdayStatusScreenState extends State<BirthdayStatusScreen> {
   }
 
   // =========================================================
-  // EMPTY STATE
+  // CHAT INFO
   // =========================================================
 
-  Widget _buildEmptyState() {
+  Widget _buildChatInfo() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        vertical: 38,
-        horizontal: 20,
+      padding:
+          const EdgeInsets.all(
+        17,
       ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: const Color(0xffE8EDF4),
+      decoration:
+          BoxDecoration(
+        color:
+            const Color(
+          0xff172033,
+        ),
+        borderRadius:
+            BorderRadius.circular(
+          21,
         ),
       ),
-      child: Column(
+      child:
+          Row(
         children: [
           Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: const Color(0xffF1F5F9),
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: const Center(
-              child: Text(
-                '🎈',
-                style: TextStyle(fontSize: 34),
+            width: 48,
+            height: 48,
+            decoration:
+                BoxDecoration(
+              color: Colors
+                  .white
+                  .withOpacity(
+                0.10,
+              ),
+              borderRadius:
+                  BorderRadius.circular(
+                15,
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No Birthdays Today',
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xff172033),
+            child:
+                const Icon(
+              Icons
+                  .chat_rounded,
+              color:
+                  Colors.white,
+              size: 23,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            'There are no student birthdays today.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(
-              fontSize: 11,
-              color: Colors.grey.shade600,
+          const SizedBox(
+            width: 13,
+          ),
+          Expanded(
+            child:
+                Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Individual Birthday Chats',
+                  style:
+                      GoogleFonts.poppins(
+                    color:
+                        Colors.white,
+                    fontSize: 13,
+                    fontWeight:
+                        FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(
+                  height: 3,
+                ),
+                Text(
+                  'Every student has a separate conversation.',
+                  style:
+                      GoogleFonts.poppins(
+                    color:
+                        Colors.white70,
+                    fontSize: 9,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -642,80 +641,126 @@ class _BirthdayStatusScreenState extends State<BirthdayStatusScreen> {
   }
 
   // =========================================================
-  // LOADING
+  // TIP
   // =========================================================
 
-  Widget _buildLoadingState() {
+  Widget _buildTip() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(35),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+      padding:
+          const EdgeInsets.all(
+        15,
       ),
-      child: const Center(
-        child: CircularProgressIndicator(
-          color: primaryColor,
+      decoration:
+          BoxDecoration(
+        color:
+            const Color(
+          0xffE8F1FF,
+        ),
+        borderRadius:
+            BorderRadius.circular(
+          17,
+        ),
+      ),
+      child:
+          Row(
+        children: [
+          const Icon(
+            Icons
+                .info_outline_rounded,
+            color:
+                primaryColor,
+            size: 20,
+          ),
+          const SizedBox(
+            width: 10,
+          ),
+          Expanded(
+            child:
+                Text(
+              'Tap a birthday status to chat, reply, react, edit or delete messages.',
+              style:
+                  GoogleFonts.poppins(
+                fontSize: 9,
+                color:
+                    const Color(
+                  0xff36506E,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================
+  // EMPTY
+  // =========================================================
+
+  Widget _buildEmpty() {
+    return SizedBox(
+      height: 100,
+      child:
+          Center(
+        child:
+            Column(
+          mainAxisAlignment:
+              MainAxisAlignment
+                  .center,
+          children: [
+            const Text(
+              '🎈',
+              style:
+                  TextStyle(
+                fontSize: 28,
+              ),
+            ),
+            const SizedBox(
+              height: 5,
+            ),
+            Text(
+              'No birthdays today',
+              style:
+                  GoogleFonts.poppins(
+                fontSize: 10,
+                color:
+                    Colors.grey.shade600,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   // =========================================================
-  // ACTIONS
+  // INITIALS
   // =========================================================
 
-  Future<void> _refreshBirthdayStatus() async {
-    setState(() {
-      isLoading = true;
-    });
+  String _initials(
+    String name,
+  ) {
+    final parts =
+        name.trim().split(' ');
 
-    await Future.delayed(
-      const Duration(milliseconds: 700),
-    );
-
-    if (mounted) {
-      setState(() {
-        isLoading = false;
-      });
+    if (parts.isEmpty ||
+        parts.first.isEmpty) {
+      return '?';
     }
-  }
 
-  void _showBirthdayWish(String studentName) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xff172033),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
-        content: Text(
-          'Birthday wish for $studentName will be sent through chat.',
-          style: GoogleFonts.poppins(
-            fontSize: 12,
-            color: Colors.white,
-          ),
-        ),
-      ),
-    );
-  }
+    if (parts.length == 1) {
+      return parts.first
+          .substring(
+            0,
+            parts.first.length >=
+                    2
+                ? 2
+                : 1,
+          )
+          .toUpperCase();
+    }
 
-  void _openBirthdayChat() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: primaryColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
-        content: Text(
-          'Birthday Chat screen will open here.',
-          style: GoogleFonts.poppins(
-            fontSize: 12,
-            color: Colors.white,
-          ),
-        ),
-      ),
-    );
+    return '${parts.first[0]}${parts.last[0]}'
+        .toUpperCase();
   }
 }

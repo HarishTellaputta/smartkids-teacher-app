@@ -613,17 +613,6 @@ class _ClassWorkspaceScreenState extends State<ClassWorkspaceScreen> {
         _toolCard(context, Icons.fact_check_rounded, 'Attendance'),
 
         _toolCard(context, Icons.assignment_rounded, 'Homework'),
-
-        _toolCard(context, Icons.grade_rounded, 'Marks'),
-
-        _toolCard(context, Icons.chat_rounded, 'Chat'),
-
-        _toolCard(
-          context,
-          Icons.emoji_events_rounded,
-          'Achievements',
-          enabled: false,
-        ),
       ],
     );
   }
