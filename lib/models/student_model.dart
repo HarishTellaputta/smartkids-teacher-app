@@ -1,3 +1,4 @@
+
 class StudentModel {
   final int id;
   final String admissionNo;
@@ -9,14 +10,25 @@ class StudentModel {
   final String gender;
   final String bloodGroup;
   final String admissionDate;
-  final String address;
+
+  final int classId;
+  final String className;
+
   final int sectionId;
-  final int parentId;
-  final int academicYearId;
   final String sectionName;
+
+  final int parentId;
   final String parentName;
+
+  final int academicYearId;
   final String academicYearName;
+
   final String status;
+  final String address;
+
+  final String createdAt;
+  final String updatedAt;
+  final bool transportRequired;
 
   StudentModel({
     required this.id,
@@ -29,36 +41,69 @@ class StudentModel {
     required this.gender,
     required this.bloodGroup,
     required this.admissionDate,
-    required this.address,
+    required this.classId,
+    required this.className,
     required this.sectionId,
-    required this.parentId,
-    required this.academicYearId,
     required this.sectionName,
+    required this.parentId,
     required this.parentName,
+    required this.academicYearId,
     required this.academicYearName,
     required this.status,
+    required this.address,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.transportRequired,
   });
 
   factory StudentModel.fromJson(Map<String, dynamic> json) {
+    int parseInt(dynamic value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value?.toString() ?? '') ?? 0;
+    }
+
+    String parseString(dynamic value) {
+      return value?.toString() ?? '';
+    }
+
+    bool parseBool(dynamic value) {
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+
+      return value?.toString().toLowerCase() == 'true';
+    }
+
     return StudentModel(
-      id: json['id'] ?? 0,
-      admissionNo: json['admissionNo'] ?? '',
-      rollNumber: json['rollNumber'] ?? '',
-      name: json['name'] ?? '',
-      email: json['email'] ?? '',
-      phone: json['phone'] ?? '',
-      dateOfBirth: json['dateOfBirth'] ?? '',
-      gender: json['gender'] ?? '',
-      bloodGroup: json['bloodGroup'] ?? '',
-      admissionDate: json['admissionDate'] ?? '',
-      address: json['address'] ?? '',
-      sectionId: json['sectionId'] ?? 0,
-      parentId: json['parentId'] ?? 0,
-      academicYearId: json['academicYearId'] ?? 0,
-      sectionName: json['sectionName'] ?? '',
-      parentName: json['parentName'] ?? '',
-      academicYearName: json['academicYearName'] ?? '',
-      status: json['status'] ?? '',
+      id: parseInt(json['id']),
+      admissionNo: parseString(json['admissionNo']),
+      rollNumber: parseString(json['rollNumber']),
+      name: parseString(json['name']),
+      email: parseString(json['email']),
+      phone: parseString(json['phone']),
+      dateOfBirth: parseString(json['dateOfBirth']),
+      gender: parseString(json['gender']),
+      bloodGroup: parseString(json['bloodGroup']),
+      admissionDate: parseString(json['admissionDate']),
+
+      classId: parseInt(json['classId']),
+      className: parseString(json['className']),
+
+      sectionId: parseInt(json['sectionId']),
+      sectionName: parseString(json['sectionName']),
+
+      parentId: parseInt(json['parentId']),
+      parentName: parseString(json['parentName']),
+
+      academicYearId: parseInt(json['academicYearId']),
+      academicYearName: parseString(json['academicYearName']),
+
+      status: parseString(json['status']),
+      address: parseString(json['address']),
+
+      createdAt: parseString(json['createdAt']),
+      updatedAt: parseString(json['updatedAt']),
+      transportRequired: parseBool(json['transportRequired']),
     );
   }
 
@@ -74,14 +119,19 @@ class StudentModel {
       'gender': gender,
       'bloodGroup': bloodGroup,
       'admissionDate': admissionDate,
-      'address': address,
+      'classId': classId,
+      'className': className,
       'sectionId': sectionId,
-      'parentId': parentId,
-      'academicYearId': academicYearId,
       'sectionName': sectionName,
+      'parentId': parentId,
       'parentName': parentName,
+      'academicYearId': academicYearId,
       'academicYearName': academicYearName,
       'status': status,
+      'address': address,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+      'transportRequired': transportRequired,
     };
   }
 }
