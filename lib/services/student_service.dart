@@ -29,7 +29,7 @@ class StudentService {
     debugPrint('Student ID: $studentId');
 
     try {
-     final response = await _dio.get('/api/v1/students/$studentId');
+      final response = await _dio.get('/api/v1/students/$studentId');
 
       debugPrint('Student API Status: ${response.statusCode}');
       debugPrint('Student API Response: ${response.data}');
@@ -233,8 +233,7 @@ class StudentService {
     debugPrint('Class ID: $classId');
 
     try {
-      final response = await _dio.get('/students/class/$classId');
-
+      final response = await _dio.get('/api/v1/students/class/$classId');
       debugPrint('Status: ${response.statusCode}');
       debugPrint('Response: ${response.data}');
 

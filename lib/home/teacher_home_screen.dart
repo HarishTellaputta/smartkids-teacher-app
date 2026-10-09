@@ -23,6 +23,7 @@ import 'package:teacher_app/models/birthday_chat_message_model.dart';
 import 'package:teacher_app/services/birthday_service.dart';
 import 'package:teacher_app/models/student_model.dart';
 import 'package:teacher_app/services/student_service.dart';
+import '../teacher/call_parent_screen.dart';
 
 class TeacherHomeScreen extends StatefulWidget {
   const TeacherHomeScreen({super.key});
@@ -69,18 +70,17 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   // BODY
   // ============================================================
 
-  Widget _buildBody() {
-    if (_selectedIndex == 1) {
-      return const ExamsScreen();
-    }
-
-    if (_selectedIndex == 2) {
-      // return const LeaveRequestScreen();
-      return _buildComingSoon();
-    }
-
-    return _buildHome();
+ Widget _buildBody() {
+  if (_selectedIndex == 1) {
+    return const ExamsScreen();
   }
+
+  if (_selectedIndex == 2) {
+    return const CallParentScreen();
+  }
+
+  return _buildHome();
+}
 
   Widget _buildComingSoon() {
     return const Center(
@@ -1089,12 +1089,9 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
         ),
 
         NavigationDestination(
-          icon: const Icon(Icons.event_available_outlined),
-          selectedIcon: const Icon(
-            Icons.event_available_rounded,
-            color: primaryColor,
-          ),
-          label: 'Leave Request',
+          icon: const Icon(Icons.call_outlined),
+          selectedIcon: const Icon(Icons.call_rounded, color: primaryColor),
+          label: 'Call Parent',
         ),
       ],
     );
